@@ -57,6 +57,37 @@ O MacDeck CYD possui um **servidor web HTTP e mDNS nativo** rodando diretamente 
 
 ---
 
+## 🎵 Como Conectar sua Conta Spotify (Passo a Passo)
+
+O Spotify atualizou suas regras de segurança OAuth: **endereços HTTP comuns ou `.local` não são permitidos como Redirect URI**. O Spotify exige **HTTPS** ou o endereço de loopback **`http://127.0.0.1:<porta>/callback`**.
+
+### 1. No Spotify Developer Dashboard
+1. Acesse o [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) e clique em **Create App**.
+2. Dê um nome (ex: `MacDeck CYD`) e selecione **Web API**.
+3. Em **Settings > Redirect URIs**, adicione exatamente:
+   ```
+   http://127.0.0.1:8888/callback
+   ```
+   *(O Spotify aceita perfeitamente `127.0.0.1` sob HTTP!)*
+4. Salve e copie o seu **Client ID** e **Client Secret**.
+
+### 2. Autenticação em 1 Clique (Automático via Mac)
+No terminal do seu Mac, na pasta do projeto:
+```bash
+python3 tools/get_spotify_token.py
+```
+O script irá:
+1. Pedir seu **Client ID** e **Client Secret**.
+2. Abrir seu navegador automaticamente para autorizar a conta.
+3. Capturar o código em `http://127.0.0.1:8888/callback`.
+4. Obter o `Refresh Token` permanente e enviá-lo diretamente para o seu MacDeck CYD (`http://macdeck.local`)!
+
+### 3. Alternativa Manual
+Se preferir não rodar o script, você pode colar seu **Client ID**, **Client Secret** e **Refresh Token** diretamente na aba **Spotify** do painel web [http://macdeck.local](http://macdeck.local) e clicar em **Salvar Manual**.
+
+
+---
+
 ## 🛠️ Pinagem do Hardware (ESP32-2432S028 CYD)
 
 | Periférico | Pinos ESP32 | Descrição |
