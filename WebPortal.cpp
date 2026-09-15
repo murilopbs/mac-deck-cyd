@@ -2,6 +2,7 @@
 #include "WebPortalData.h"
 #include "WiFiManager.h"
 #include "BleManager.h"
+#include "SpotifyAuth.h"
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 
@@ -34,6 +35,9 @@ void WebPortal::setupRoutes() {
   server.on("/api/wifi/scan", HTTP_GET, [this]() { handleScanWifi(); });
   server.on("/api/wifi", HTTP_POST, [this]() { handleSaveWifi(); });
   server.on("/api/spotify", HTTP_POST, [this]() { handleSaveSpotify(); });
+  server.on("/api/spotify/status", HTTP_GET, [this]() { handleSpotifyStatus(); });
+  server.on("/api/spotify/refresh", HTTP_POST, [this]() { handleSpotifyRefresh(); });
+  server.on("/callback", HTTP_GET, [this]() { handleCallback(); });
   server.on("/api/action", HTTP_POST, [this]() { handleAction(); });
   server.onNotFound([this]() { handleNotFound(); });
 }
@@ -124,6 +128,75 @@ void WebPortal::handleSaveSpotify() {
 
   wifiManager.saveSpotifyCredentials(clientId, clientSecret, refreshToken);
   server.send(200, "application/json", "{\"success\":true}");
+  
+  // Tenta renovar o token imediatamente com as novas credenciais
+  if (clientId.length() > 0 && clientSecret.length() > 0 && refreshToken.length() > 0) {
+    spotifyAuth.refreshToken();
+  }
+}
+
+void WebPortal::handleSpotifyStatus() {
+  JsonDocument doc;
+  doc["configured"] = spotifyAuth.isConfigured();
+  doc["authenticated"] = spotifyAuth.isAuthenticated();
+  doc["expires_in"] = spotifyAuth.getSecondsUntilExpiration();
+  doc["error"] = spotifyAuth.getLastError();
+
+  String response;
+  serializeJson(doc, response);
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", response);
+}
+
+void WebPortal::handleSpotifyRefresh() {
+  bool ok = spotifyAuth.refreshToken();
+  JsonDocument doc;
+  doc["success"] = ok;
+  doc["authenticated"] = spotifyAuth.isAuthenticated();
+  doc["expires_in"] = spotifyAuth.getSecondsUntilExpiration();
+  doc["error"] = spotifyAuth.getLastError();
+
+  String response;
+  serializeJson(doc, response);
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(ok ? 200 : 400, "application/json", response);
+}
+
+void WebPortal::handleCallback() {
+  if (!server.hasArg("code")) {
+    server.send(400, "text/html", "<h2>Erro</h2><p>Codigo de autorizacao ausente.</p><a href='/'>Voltar</a>");
+    return;
+  }
+
+  String code = server.arg("code");
+  Serial.printf("[WebPortal] Codigo OAuth recebido: %s... Trocando por tokens...\n", code.substring(0, 10).c_str());
+
+  bool ok = spotifyAuth.exchangeCode(code, "http://macdeck.local/callback");
+  if (ok) {
+    String html = "<!DOCTYPE html><html lang='pt-BR'><head><meta charset='UTF-8'><meta http-equiv='refresh' content='3;url=/'><style>"
+                  "body{font-family:sans-serif;background:#0d1117;color:#f0f6fc;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;}"
+                  ".card{background:#161b22;border:1px solid #1DB954;border-radius:14px;padding:32px;text-align:center;max-width:420px;box-shadow:0 8px 30px rgba(0,0,0,0.5);}"
+                  "h1{color:#1DB954;font-size:1.5rem;margin-bottom:12px;}p{color:#8b949e;font-size:0.9rem;margin-bottom:20px;line-height:1.5;}"
+                  "a{display:inline-block;background:#1DB954;color:#000;font-weight:bold;text-decoration:none;padding:12px 24px;border-radius:8px;}"
+                  "</style></head><body><div class='card'>"
+                  "<h1>🎉 Conectado ao Spotify!</h1>"
+                  "<p>O MacDeck CYD obteve os tokens de acesso com sucesso. Redirecionando para o painel em 3 segundos...</p>"
+                  "<a href='/'>Ir para o MacDeck Agora</a>"
+                  "</div></body></html>";
+    server.send(200, "text/html", html);
+  } else {
+    String html = "<!DOCTYPE html><html lang='pt-BR'><head><meta charset='UTF-8'><style>"
+                  "body{font-family:sans-serif;background:#0d1117;color:#f0f6fc;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;}"
+                  ".card{background:#161b22;border:1px solid #f85149;border-radius:14px;padding:32px;text-align:center;max-width:420px;}"
+                  "h1{color:#f85149;font-size:1.4rem;margin-bottom:12px;}p{color:#8b949e;font-size:0.9rem;margin-bottom:20px;}"
+                  "a{display:inline-block;background:#388bfd;color:#fff;font-weight:bold;text-decoration:none;padding:10px 20px;border-radius:8px;}"
+                  "</style></head><body><div class='card'>"
+                  "<h1>Falha na Autorizacao</h1>"
+                  "<p>" + spotifyAuth.getLastError() + "</p>"
+                  "<a href='/'>Voltar e tentar novamente</a>"
+                  "</div></body></html>";
+    server.send(500, "text/html", html);
+  }
 }
 
 void WebPortal::handleAction() {

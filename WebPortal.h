@@ -25,6 +25,9 @@ private:
   void handleScanWifi();
   void handleSaveWifi();
   void handleSaveSpotify();
+  void handleSpotifyStatus();
+  void handleSpotifyRefresh();
+  void handleCallback();
   void handleAction();
   void handleNotFound();
 };

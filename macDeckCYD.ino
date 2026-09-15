@@ -25,6 +25,7 @@
 #include "BleManager.h"
 #include "WiFiManager.h"
 #include "WebPortal.h"
+#include "SpotifyAuth.h"
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
 
@@ -124,7 +125,10 @@ void setup() {
   webPortal.setButtonCallback(executeDeckButton);
   webPortal.begin();
 
-  // 6. Renderiza Interface Completa
+  // 6. Inicializa Motor de Autenticação Spotify OAuth
+  spotifyAuth.begin();
+
+  // 7. Renderiza Interface Completa
   display.clear(COLOR_BG);
   display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
   display.drawAllButtons(buttons);
@@ -144,9 +148,10 @@ void loop() {
   // 1. Monitora estado do Bluetooth BLE
   bleMgr.update();
 
-  // 2. Atualiza estado do Wi-Fi e processa requisições Web HTTP
+  // 2. Atualiza estado do Wi-Fi, Web Portal e renovação de tokens Spotify
   wifiManager.update();
   webPortal.update();
+  spotifyAuth.update();
 
   // 3. Verifica alterações de status de conexão periodicamente
   if (millis() - lastHeaderRefresh > 500) {
