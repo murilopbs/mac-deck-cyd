@@ -150,7 +150,7 @@ void DisplayDriver::drawSpotifyCard(const SpotifyTrackData &track) {
     tft.print(nextLine);
   } else {
     tft.setTextColor(COLOR_TEXT_MUTED);
-    tft.print(">> Fim da fila de reproducao");
+    tft.print(">> Sem proxima faixa na fila");
   }
 }
 

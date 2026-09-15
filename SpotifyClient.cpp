@@ -92,7 +92,10 @@ bool SpotifyClient::fetchPlaybackState() {
   }
 
   if (httpCode == 200) {
-    // Filtragem em streaming com ArduinoJson para economizar RAM
+    String payload = http.getString();
+    http.end();
+
+    // Filtragem com ArduinoJson para economizar RAM
     JsonDocument filter;
     filter["is_playing"] = true;
     filter["progress_ms"] = true;
@@ -102,8 +105,7 @@ bool SpotifyClient::fetchPlaybackState() {
     filter["item"]["album"]["name"] = true;
 
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
-    http.end();
+    DeserializationError err = deserializeJson(doc, payload, DeserializationOption::Filter(filter));
 
     if (!err && doc["item"]) {
       String newTitle = doc["item"]["name"].as<String>();
@@ -131,16 +133,19 @@ bool SpotifyClient::fetchPlaybackState() {
       }
 
       return true;
+    } else if (err) {
+      Serial.printf("[SpotifyClient] Erro no parsing JSON do status: %s\n", err.c_str());
     }
   } else if (httpCode == 401) {
     Serial.println("[SpotifyClient] Token expirado (401). Forçando renovação...");
     spotifyAuth.refreshToken();
+    http.end();
   } else {
     Serial.printf("[SpotifyClient] HTTP Error: %d\n", httpCode);
     consecutiveFailures++;
+    http.end();
   }
 
-  http.end();
   return false;
 }
 
@@ -154,19 +159,21 @@ bool SpotifyClient::fetchQueue() {
   HTTPClient http;
   http.begin(client, "https://api.spotify.com/v1/me/player/queue");
   http.addHeader("Authorization", "Bearer " + token);
-  http.setTimeout(4000);
+  http.setTimeout(5000);
 
   int httpCode = http.GET();
 
   if (httpCode == 200) {
+    String payload = http.getString();
+    http.end();
+
     // Filtragem em streaming com ArduinoJson para extrair apenas a próxima música da fila (queue[0])
     JsonDocument filter;
     filter["queue"][0]["name"] = true;
     filter["queue"][0]["artists"][0]["name"] = true;
 
     JsonDocument doc;
-    DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
-    http.end();
+    DeserializationError err = deserializeJson(doc, payload, DeserializationOption::Filter(filter));
 
     if (!err && doc["queue"] && doc["queue"].size() > 0) {
       currentData.nextTitle = doc["queue"][0]["name"].as<String>();
@@ -175,10 +182,23 @@ bool SpotifyClient::fetchQueue() {
       Serial.printf("[SpotifyClient] Próxima da fila capturada: %s - %s\n",
                     currentData.nextTitle.c_str(), currentData.nextArtist.c_str());
       return true;
+    } else {
+      if (err) {
+        Serial.printf("[SpotifyClient] Erro no parsing JSON da fila: %s (Payload: %d bytes)\n",
+                      err.c_str(), payload.length());
+      } else {
+        Serial.printf("[SpotifyClient] Fila retornou sem itens no momento (Payload: %d bytes)\n",
+                      payload.length());
+      }
+      currentData.nextTitle = "";
+      currentData.nextArtist = "";
+      dataChanged = true;
     }
+  } else {
+    Serial.printf("[SpotifyClient] Erro HTTP ao buscar fila: %d\n", httpCode);
+    http.end();
   }
 
-  http.end();
   return false;
 }
 

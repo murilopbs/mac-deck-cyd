@@ -1,7 +1,6 @@
 #include "WiFiManager.h"
 #include <Preferences.h>
 
-static Preferences prefs;
 static const char *PREF_NAMESPACE = "macdeck";
 static const char *KEY_WIFI_SSID = "wifi_ssid";
 static const char *KEY_WIFI_PASS = "wifi_pass";
@@ -15,11 +14,10 @@ WiFiManager::WiFiManager()
     : apActive(false), lastConnectAttempt(0), apStartTimer(0) {}
 
 void WiFiManager::begin() {
-  prefs.begin(PREF_NAMESPACE, false);
-  String savedSSID = prefs.getString(KEY_WIFI_SSID, "");
-  String savedPass = prefs.getString(KEY_WIFI_PASS, "");
+  String savedSSID = getSavedSSID();
+  String savedPass = getSavedPass();
 
-  WiFi.persistent(false);
+  WiFi.persistent(true);
   WiFi.setAutoReconnect(true);
 
   if (savedSSID.length() > 0) {
@@ -35,23 +33,30 @@ void WiFiManager::begin() {
 }
 
 void WiFiManager::update() {
-  // Se estiver tentando conectar no STA e demorar mais de 15s sem sucesso, abre o AP de configuracao
+  // Se conectou ao STA e o modo AP ainda estava ativo, desliga o AP automaticamente
+  if (apActive && isConnected()) {
+    Serial.printf("[WiFi] STA conectado com sucesso (%s)! Desativando SoftAP...\n", WiFi.localIP().toString().c_str());
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+    apActive = false;
+  }
+
+  // Se estiver tentando conectar no STA no boot e demorar mais de 25s, ativa o AP de contingência
   if (!apActive && !isConnected() && apStartTimer > 0) {
-    if (millis() - apStartTimer > 15000) {
-      Serial.println("[WiFi] Timeout na conexao STA. Ativando AP de contingencia...");
+    if (millis() - apStartTimer > 25000) {
+      Serial.println("[WiFi] Timeout inicial na conexao STA. Ativando AP de contingencia...");
       startAP();
     }
   }
 
-  // Se nao estiver em modo AP e perdeu conexao, tenta reconectar a cada 30 segundos
-  if (!apActive && !isConnected()) {
-    if (millis() - lastConnectAttempt > 30000) {
+  // Se desconectado, tenta reconectar periodicamente a cada 15 segundos (mesmo com AP ativo)
+  if (!isConnected()) {
+    if (millis() - lastConnectAttempt > 15000) {
       lastConnectAttempt = millis();
       String savedSSID = getSavedSSID();
       String savedPass = getSavedPass();
       if (savedSSID.length() > 0) {
         Serial.printf("[WiFi] Tentando reconectar a %s...\n", savedSSID.c_str());
-        WiFi.disconnect();
         WiFi.begin(savedSSID.c_str(), savedPass.c_str());
       }
     }
@@ -61,7 +66,6 @@ void WiFiManager::update() {
 void WiFiManager::startAP() {
   apActive = true;
   WiFi.mode(WIFI_AP_STA);
-  // Cria rede Wi-Fi aberta MacDeck-Setup para facilitar conexao de primeira viagem
   WiFi.softAP("MacDeck-Setup");
   Serial.printf("[WiFi] Access Point ativo: 'MacDeck-Setup'. IP: %s\n",
                 WiFi.softAPIP().toString().c_str());
@@ -99,8 +103,12 @@ int WiFiManager::getRSSI() {
 }
 
 void WiFiManager::saveCredentials(const String &ssid, const String &pass) {
-  prefs.putString(KEY_WIFI_SSID, ssid);
-  prefs.putString(KEY_WIFI_PASS, pass);
+  Preferences p;
+  if (p.begin(PREF_NAMESPACE, false)) {
+    p.putString(KEY_WIFI_SSID, ssid);
+    p.putString(KEY_WIFI_PASS, pass);
+    p.end();
+  }
   Serial.printf("[WiFi] Novas credenciais salvas para %s. Reiniciando conexao...\n", ssid.c_str());
   
   WiFi.disconnect();
@@ -112,30 +120,64 @@ void WiFiManager::saveCredentials(const String &ssid, const String &pass) {
 }
 
 String WiFiManager::getSavedSSID() {
-  return prefs.getString(KEY_WIFI_SSID, "");
+  Preferences p;
+  String val = "";
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getString(KEY_WIFI_SSID, "");
+    p.end();
+  }
+  return val;
 }
 
 String WiFiManager::getSavedPass() {
-  return prefs.getString(KEY_WIFI_PASS, "");
+  Preferences p;
+  String val = "";
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getString(KEY_WIFI_PASS, "");
+    p.end();
+  }
+  return val;
 }
 
 void WiFiManager::saveSpotifyCredentials(const String &clientId, const String &clientSecret, const String &refreshToken) {
-  prefs.putString(KEY_SPOT_ID, clientId);
-  prefs.putString(KEY_SPOT_SEC, clientSecret);
-  prefs.putString(KEY_SPOT_TOK, refreshToken);
+  Preferences p;
+  if (p.begin(PREF_NAMESPACE, false)) {
+    p.putString(KEY_SPOT_ID, clientId);
+    p.putString(KEY_SPOT_SEC, clientSecret);
+    p.putString(KEY_SPOT_TOK, refreshToken);
+    p.end();
+  }
   Serial.println("[Spotify] Credenciais salvas com sucesso no NVS.");
 }
 
 String WiFiManager::getSpotifyClientId() {
-  return prefs.getString(KEY_SPOT_ID, "");
+  Preferences p;
+  String val = "";
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getString(KEY_SPOT_ID, "");
+    p.end();
+  }
+  return val;
 }
 
 String WiFiManager::getSpotifyClientSecret() {
-  return prefs.getString(KEY_SPOT_SEC, "");
+  Preferences p;
+  String val = "";
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getString(KEY_SPOT_SEC, "");
+    p.end();
+  }
+  return val;
 }
 
 String WiFiManager::getSpotifyRefreshToken() {
-  return prefs.getString(KEY_SPOT_TOK, "");
+  Preferences p;
+  String val = "";
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getString(KEY_SPOT_TOK, "");
+    p.end();
+  }
+  return val;
 }
 
 int WiFiManager::scanNetworks() {
