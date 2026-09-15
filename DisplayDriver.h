@@ -7,6 +7,8 @@
 #include <Adafruit_ST7789.h>
 #include "Config.h"
 
+struct SpotifyTrackData;
+
 class DisplayDriver {
 public:
   DisplayDriver();
@@ -14,6 +16,9 @@ public:
 
   void clear(uint16_t color = COLOR_BG);
   void drawHeader(bool isBleConnected, bool isWifiConnected, bool isApMode = false);
+  void drawSpotifyCard(const SpotifyTrackData &track);
+  void drawSpotifyProgressOnly(const SpotifyTrackData &track);
+  void drawSpotifyFullScreen(const SpotifyTrackData &track);
   void drawFooter(const String &info = "");
   void drawButton(const DeckButton &btn);
   void drawAllButtons(const DeckButton buttons[6]);

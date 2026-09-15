@@ -11,9 +11,9 @@
  * - 6 Botões Touch com ícones vetoriais modernos e feedback tátil
  * - Bluetooth Low Energy nativo HID (sem precisar instalar nada no Mac)
  * - Portal Web Local embarcado em http://macdeck.local para celular e Mac
+ * - Integração Spotify Web API: Faixa Atual + Próxima da Fila + Progresso
+ * - Modo Focus Full-Screen ao tocar no card do Spotify
  * - Coexistência Wi-Fi + BLE sem interferência ou perda de pacotes
- * - Atalhos de Mídia (Play/Pause, Próximo, Mudo)
- * - Atalhos de Produtividade e Reunião (Mic Mute, Print, Travar Mac)
  * - LED RGB traseiro para feedback de comando
  * 
  * ============================================================================
@@ -30,48 +30,57 @@
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
 
+// Modos de Exibição da Tela
+enum ScreenMode {
+  MODE_DECK = 0,        // Grade com 6 botões + Card Spotify no topo
+  MODE_SPOTIFY_FOCUS    // Player do Spotify expandido em tela cheia
+};
+
+ScreenMode currentScreenMode = MODE_DECK;
+
 // Definição dos 6 Botões da Grade (2 linhas x 3 colunas)
+// Ajustados para y = 74..146 (Linha 1) e y = 150..222 (Linha 2)
 DeckButton buttons[6] = {
-  // --- LINHA 1 (y = 36 a 122) ---
+  // --- LINHA 1 (y = 74 a 146, altura 72px) ---
   {
-    10, 36, 94, 86,
+    10, 74, 94, 72,
     "PLAY/PAUSE", "Spotify/Midia",
     ICON_PLAY_PAUSE, COLOR_ACCENT,
     ACT_MEDIA, MEDIA_PLAY_PAUSE, 0, 0,
     false
   },
   {
-    113, 36, 94, 86,
+    113, 74, 94, 72,
     "PROXIMO", "Next Track",
     ICON_NEXT, COLOR_CYAN,
     ACT_MEDIA, MEDIA_NEXT_TRACK, 0, 0,
     false
   },
   {
-    216, 36, 94, 86,
+    216, 74, 94, 72,
     "MUDO", "Audio Mute",
     ICON_MUTE, COLOR_RED,
     ACT_MEDIA, MEDIA_MUTE, 0, 0,
     false
   },
 
-  // --- LINHA 2 (y = 130 a 216) ---
+  // --- LINHA 2 (y = 150 a 222, altura 72px) ---
   {
-    10, 130, 94, 86,
+    10, 150, 94, 72,
     "MIC MUTE", "Meet / Zoom",
     ICON_MIC_MUTE, COLOR_RED,
     ACT_MACRO, 0, (KEY_MOD_LGUI | KEY_MOD_LSHIFT), KEY_M,
     false
   },
   {
-    113, 130, 94, 86,
+    113, 150, 94, 72,
     "CAPTURA", "Cmd+Shift+4",
     ICON_SCREENSHOT, COLOR_GREEN,
     ACT_MACRO, 0, (KEY_MOD_LGUI | KEY_MOD_LSHIFT), KEY_4,
     false
   },
   {
-    216, 130, 94, 86,
+    216, 150, 94, 72,
     "TRAVAR MAC", "Lock Screen",
     ICON_LOCK, COLOR_PURPLE,
     ACT_MACRO, 0, (KEY_MOD_LGUI | KEY_MOD_LCTRL), KEY_Q,
@@ -83,6 +92,27 @@ bool lastBleStatus = false;
 bool lastWifiStatus = false;
 bool lastApStatus = false;
 unsigned long lastHeaderRefresh = 0;
+String lastDisplayedSong = "";
+bool lastPlayingState = false;
+
+void redrawCurrentScreen() {
+  if (currentScreenMode == MODE_DECK) {
+    display.clear(COLOR_BG);
+    display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
+    display.drawSpotifyCard(spotifyClient.getData());
+    display.drawAllButtons(buttons);
+    if (wifiManager.isConnected()) {
+      display.drawFooter("http://macdeck.local \x07 IP: " + wifiManager.getIP());
+    } else if (wifiManager.isAPMode()) {
+      display.drawFooter("AP: MacDeck-Setup \x07 192.168.4.1");
+    } else {
+      display.drawFooter("http://macdeck.local \x07 Toque no card para ampliar");
+    }
+  } else {
+    display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
+    display.drawSpotifyFullScreen(spotifyClient.getData());
+  }
+}
 
 void executeDeckButton(int index) {
   if (index < 0 || index >= 6) return;
@@ -91,7 +121,9 @@ void executeDeckButton(int index) {
 
   // Feedback visual de botão pressionado
   btn.isPressed = true;
-  display.drawButton(btn);
+  if (currentScreenMode == MODE_DECK) {
+    display.drawButton(btn);
+  }
 
   // Dispara o comando BLE para o Mac
   bleMgr.executeButton(btn);
@@ -101,7 +133,9 @@ void executeDeckButton(int index) {
 
   // Restaura aparência normal
   btn.isPressed = false;
-  display.drawButton(btn);
+  if (currentScreenMode == MODE_DECK) {
+    display.drawButton(btn);
+  }
 }
 
 void setup() {
@@ -133,17 +167,7 @@ void setup() {
   spotifyClient.begin();
 
   // 8. Renderiza Interface Completa
-  display.clear(COLOR_BG);
-  display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
-  display.drawAllButtons(buttons);
-  
-  if (wifiManager.isConnected()) {
-    display.drawFooter("http://macdeck.local \x07 IP: " + wifiManager.getIP());
-  } else if (wifiManager.isAPMode()) {
-    display.drawFooter("AP: MacDeck-Setup \x07 192.168.4.1");
-  } else {
-    display.drawFooter("http://macdeck.local \x07 Conectando Wi-Fi...");
-  }
+  redrawCurrentScreen();
 
   Serial.println("[SYSTEM] Pronto! Acesse http://macdeck.local no navegador do Mac.");
 }
@@ -158,8 +182,28 @@ void loop() {
   spotifyAuth.update();
   spotifyClient.update();
 
-  // 3. Verifica alterações de status de conexão periodicamente
-  if (millis() - lastHeaderRefresh > 500) {
+  // 3. Atualização de status do Spotify na tela
+  if (spotifyClient.hasChanged()) {
+    const SpotifyTrackData &track = spotifyClient.getData();
+
+    if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
+      display.drawSpotifyFullScreen(track);
+    } else {
+      // Se a música ou estado de reprodução mudou, redesenha o card inteiro
+      if (track.title != lastDisplayedSong || track.isPlaying != lastPlayingState) {
+        lastDisplayedSong = track.title;
+        lastPlayingState = track.isPlaying;
+        display.drawSpotifyCard(track);
+      } else {
+        // Apenas o tempo avançou: atualiza a barra de progresso suavemente
+        display.drawSpotifyProgressOnly(track);
+      }
+    }
+    spotifyClient.clearChanged();
+  }
+
+  // 4. Verifica alterações de status de conexão de rede periodicamente
+  if (millis() - lastHeaderRefresh > 1000) {
     lastHeaderRefresh = millis();
     bool curBle = bleMgr.isConnected();
     bool curWifi = wifiManager.isConnected();
@@ -169,27 +213,37 @@ void loop() {
       lastBleStatus = curBle;
       lastWifiStatus = curWifi;
       lastApStatus = curAp;
-
       display.drawHeader(curBle, curWifi, curAp);
-      if (curWifi) {
-        display.drawFooter("http://macdeck.local \x07 IP: " + wifiManager.getIP());
-      } else if (curAp) {
-        display.drawFooter("AP: MacDeck-Setup \x07 192.168.4.1");
-      } else {
-        display.drawFooter("http://macdeck.local \x07 Conectando Wi-Fi...");
-      }
     }
   }
 
-  // 4. Processa toques na tela física (Touchscreen)
+  // 5. Processa toques na tela física (Touchscreen)
   int tx, ty;
   if (touch.getTouch(tx, ty)) {
-    for (int i = 0; i < 6; i++) {
-      DeckButton &btn = buttons[i];
-      if (tx >= btn.x && tx <= (btn.x + btn.w) &&
-          ty >= btn.y && ty <= (btn.y + btn.h)) {
-        executeDeckButton(i);
-        break;
+    if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
+      // No modo foco, qualquer toque ou toque no botão de voltar retorna ao deck
+      Serial.println("[UI] Saindo do Modo Focus... Retornando ao Stream Deck.");
+      currentScreenMode = MODE_DECK;
+      redrawCurrentScreen();
+      delay(200);
+    } else {
+      // Modo Deck
+      // Toque na área do Spotify Card (y = 26..72) expande para modo foco
+      if (ty >= 26 && ty <= 72 && tx >= 10 && tx <= 310) {
+        Serial.println("[UI] Toque no Spotify Card: abrindo Modo Focus Full-Screen...");
+        currentScreenMode = MODE_SPOTIFY_FOCUS;
+        redrawCurrentScreen();
+        delay(200);
+      } else {
+        // Toque na grade dos 6 botões
+        for (int i = 0; i < 6; i++) {
+          DeckButton &btn = buttons[i];
+          if (tx >= btn.x && tx <= (btn.x + btn.w) &&
+              ty >= btn.y && ty <= (btn.y + btn.h)) {
+            executeDeckButton(i);
+            break;
+          }
+        }
       }
     }
   }

@@ -1,5 +1,7 @@
 #include "DisplayDriver.h"
 
+#include "SpotifyClient.h"
+
 DisplayDriver display;
 
 DisplayDriver::DisplayDriver()
@@ -33,61 +35,258 @@ void DisplayDriver::clear(uint16_t color) {
 }
 
 void DisplayDriver::drawHeader(bool isBleConnected, bool isWifiConnected, bool isApMode) {
-  tft.fillRect(0, 0, SCREEN_WIDTH, 30, COLOR_HEADER_BG);
-  tft.drawFastHLine(0, 30, SCREEN_WIDTH, COLOR_DIVIDER);
+  tft.fillRect(0, 0, SCREEN_WIDTH, 24, COLOR_HEADER_BG);
+  tft.drawFastHLine(0, 24, SCREEN_WIDTH, COLOR_DIVIDER);
 
-  // Título
+  // Título (Esquerda)
   tft.setTextSize(1);
   tft.setTextColor(COLOR_ACCENT);
-  tft.setCursor(10, 11);
+  tft.setCursor(10, 8);
   tft.print("MACDECK");
 
   // Indicador Wi-Fi (Centro-Esquerda)
-  int wifiX = 72;
-  int wifiY = 11;
+  int wifiX = 66;
+  int wifiY = 8;
   if (isWifiConnected) {
-    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_GREEN);
+    tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_GREEN);
     tft.setTextColor(COLOR_GREEN);
-    tft.setCursor(wifiX + 12, wifiY);
+    tft.setCursor(wifiX + 10, wifiY);
     tft.print("Wi-Fi");
   } else if (isApMode) {
-    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_ACCENT);
+    tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_ACCENT);
     tft.setTextColor(COLOR_ACCENT);
-    tft.setCursor(wifiX + 12, wifiY);
+    tft.setCursor(wifiX + 10, wifiY);
     tft.print("AP Setup");
   } else {
-    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_TEXT_MUTED);
+    tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_TEXT_MUTED);
     tft.setTextColor(COLOR_TEXT_MUTED);
-    tft.setCursor(wifiX + 12, wifiY);
+    tft.setCursor(wifiX + 10, wifiY);
     tft.print("Wi-Fi Off");
   }
 
   // Status Bluetooth (Direita)
-  int statusW = 104;
-  int statusH = 18;
+  int statusW = 100;
+  int statusH = 16;
   int statusX = SCREEN_WIDTH - statusW - 8;
-  int statusY = 6;
+  int statusY = 4;
 
   uint16_t badgeBg = isBleConnected ? 0x0A85 : 0x098A;
   uint16_t badgeBorder = isBleConnected ? COLOR_GREEN : COLOR_BLUE;
   uint16_t badgeText = isBleConnected ? COLOR_GREEN : 0x9E3F;
   const char* label = isBleConnected ? "CONECTADO" : "PAREANDO...";
 
-  tft.fillRoundRect(statusX, statusY, statusW, statusH, 8, badgeBg);
-  tft.drawRoundRect(statusX, statusY, statusW, statusH, 8, badgeBorder);
+  tft.fillRoundRect(statusX, statusY, statusW, statusH, 6, badgeBg);
+  tft.drawRoundRect(statusX, statusY, statusW, statusH, 6, badgeBorder);
 
   // Ponto colorido indicador
-  tft.fillCircle(statusX + 10, statusY + 8, 3, isBleConnected ? COLOR_GREEN : COLOR_BLUE);
+  tft.fillCircle(statusX + 8, statusY + 8, 3, isBleConnected ? COLOR_GREEN : COLOR_BLUE);
 
   tft.setTextSize(1);
   tft.setTextColor(badgeText);
-  tft.setCursor(statusX + 22, statusY + 5);
+  tft.setCursor(statusX + 18, statusY + 4);
   tft.print(label);
 }
 
+void DisplayDriver::drawSpotifyCard(const SpotifyTrackData &track) {
+  int cardX = 10;
+  int cardY = 27;
+  int cardW = 300;
+  int cardH = 43;
+
+  tft.fillRoundRect(cardX, cardY, cardW, cardH, 6, COLOR_SPOTIFY_DARK);
+  tft.drawRoundRect(cardX, cardY, cardW, cardH, 6, track.hasTrack ? COLOR_SPOTIFY_GREEN : COLOR_DIVIDER);
+
+  if (!track.hasTrack) {
+    // Spotify Inativo
+    tft.fillCircle(cardX + 16, cardY + 21, 6, COLOR_SPOTIFY_GREEN);
+    tft.drawCircle(cardX + 16, cardY + 21, 3, COLOR_SPOTIFY_DARK);
+
+    tft.setTextSize(1);
+    tft.setTextColor(COLOR_TEXT_MUTED);
+    tft.setCursor(cardX + 30, cardY + 17);
+    tft.print("Spotify inativo ou em pausa");
+    return;
+  }
+
+  // Linha 1: Ícone Play/Pause + Título e Artista
+  if (track.isPlaying) {
+    tft.fillTriangle(cardX + 8, cardY + 6, cardX + 8, cardY + 14, cardX + 14, cardY + 10, COLOR_SPOTIFY_GREEN);
+  } else {
+    tft.fillRect(cardX + 8, cardY + 6, 2, 8, COLOR_ACCENT);
+    tft.fillRect(cardX + 12, cardY + 6, 2, 8, COLOR_ACCENT);
+  }
+
+  String songLine = track.title;
+  if (track.artist.length() > 0) {
+    songLine += " - " + track.artist;
+  }
+  if (songLine.length() > 34) {
+    songLine = songLine.substring(0, 31) + "...";
+  }
+
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_TEXT);
+  tft.setCursor(cardX + 20, cardY + 7);
+  tft.print(songLine);
+
+  // Linha 2: Barra de Progresso + Tempo
+  drawSpotifyProgressOnly(track);
+
+  // Linha 3: Próxima Música (A Seguir)
+  tft.setTextSize(1);
+  tft.setCursor(cardX + 8, cardY + 31);
+  if (track.nextTitle.length() > 0) {
+    tft.setTextColor(COLOR_CYAN);
+    tft.print(">> A Seguir: ");
+
+    String nextLine = track.nextTitle;
+    if (track.nextArtist.length() > 0) {
+      nextLine += " - " + track.nextArtist;
+    }
+    if (nextLine.length() > 24) {
+      nextLine = nextLine.substring(0, 22) + "...";
+    }
+    tft.setTextColor(COLOR_TEXT);
+    tft.print(nextLine);
+  } else {
+    tft.setTextColor(COLOR_TEXT_MUTED);
+    tft.print(">> Fim da fila de reproducao");
+  }
+}
+
+void DisplayDriver::drawSpotifyProgressOnly(const SpotifyTrackData &track) {
+  if (!track.hasTrack) return;
+
+  int barX = 18;
+  int barY = 46;
+  int barW = 196;
+  int barH = 3;
+
+  // Barra de fundo
+  tft.fillRect(barX, barY, barW, barH, COLOR_SPOTIFY_BAR);
+
+  // Progresso preenchido
+  if (track.durationMs > 0) {
+    uint32_t prog = track.progressMs;
+    if (prog > track.durationMs) prog = track.durationMs;
+    int filledW = (prog * barW) / track.durationMs;
+    if (filledW > barW) filledW = barW;
+    if (filledW > 0) {
+      tft.fillRect(barX, barY, filledW, barH, COLOR_SPOTIFY_GREEN);
+    }
+  }
+
+  // Texto de Tempo (00:00 / 00:00)
+  tft.fillRect(220, 44, 86, 9, COLOR_SPOTIFY_DARK);
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_TEXT_MUTED);
+  tft.setCursor(222, 45);
+  String timeStr = SpotifyClient::formatTime(track.progressMs) + "/" + SpotifyClient::formatTime(track.durationMs);
+  tft.print(timeStr);
+}
+
+void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
+  tft.fillRect(0, 25, SCREEN_WIDTH, SCREEN_HEIGHT - 25, COLOR_SPOTIFY_DARK);
+
+  if (!track.hasTrack) {
+    tft.setTextSize(2);
+    tft.setTextColor(COLOR_TEXT_MUTED);
+    tft.setCursor(50, 100);
+    tft.print("Spotify Inativo");
+    tft.setTextSize(1);
+    tft.setCursor(50, 130);
+    tft.print("Inicie uma musica no Mac ou celular");
+
+    tft.fillRoundRect(80, 180, 160, 36, 8, BTN_BG_DEFAULT);
+    tft.drawRoundRect(80, 180, 160, 36, 8, COLOR_ACCENT);
+    tft.setTextColor(COLOR_ACCENT);
+    tft.setCursor(95, 193);
+    tft.print("< Voltar ao Deck");
+    return;
+  }
+
+  // Título da música em tamanho 2
+  tft.setTextSize(2);
+  tft.setTextColor(COLOR_TEXT);
+  String title = track.title;
+  if (title.length() > 18) title = title.substring(0, 16) + "...";
+  tft.setCursor(16, 40);
+  tft.print(title);
+
+  // Artista e Álbum
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_SPOTIFY_GREEN);
+  String artistAlbum = track.artist;
+  if (track.album.length() > 0) artistAlbum += " \x07 " + track.album;
+  if (artistAlbum.length() > 40) artistAlbum = artistAlbum.substring(0, 38) + "...";
+  tft.setCursor(16, 64);
+  tft.print(artistAlbum);
+
+  // Status Badge
+  int badgeW = 90;
+  int badgeH = 18;
+  int badgeX = 16;
+  int badgeY = 82;
+  if (track.isPlaying) {
+    tft.fillRoundRect(badgeX, badgeY, badgeW, badgeH, 6, 0x0A85);
+    tft.drawRoundRect(badgeX, badgeY, badgeW, badgeH, 6, COLOR_SPOTIFY_GREEN);
+    tft.setTextColor(COLOR_SPOTIFY_GREEN);
+    tft.setCursor(badgeX + 8, badgeY + 5);
+    tft.print("\x10 TOCANDO");
+  } else {
+    tft.fillRoundRect(badgeX, badgeY, badgeW, badgeH, 6, 0x3180);
+    tft.drawRoundRect(badgeX, badgeY, badgeW, badgeH, 6, COLOR_ACCENT);
+    tft.setTextColor(COLOR_ACCENT);
+    tft.setCursor(badgeX + 8, badgeY + 5);
+    tft.print("❚❚ PAUSADO");
+  }
+
+  // Barra de Progresso Grande
+  int bX = 16;
+  int bY = 114;
+  int bW = 288;
+  int bH = 6;
+  tft.fillRect(bX, bY, bW, bH, COLOR_SPOTIFY_BAR);
+  if (track.durationMs > 0) {
+    int fW = (track.progressMs * bW) / track.durationMs;
+    if (fW > bW) fW = bW;
+    if (fW > 0) tft.fillRect(bX, bY, fW, bH, COLOR_SPOTIFY_GREEN);
+  }
+
+  // Tempos abaixo da barra
+  tft.setTextColor(COLOR_TEXT_MUTED);
+  tft.setCursor(bX, bY + 12);
+  tft.print(SpotifyClient::formatTime(track.progressMs));
+
+  String totalStr = SpotifyClient::formatTime(track.durationMs);
+  tft.setCursor(bX + bW - (totalStr.length() * 6), bY + 12);
+  tft.print(totalStr);
+
+  // Card Próxima Música (A Seguir)
+  tft.fillRoundRect(16, 145, 288, 38, 8, 0x18E5);
+  tft.drawRoundRect(16, 145, 288, 38, 8, COLOR_CYAN);
+  tft.setTextColor(COLOR_CYAN);
+  tft.setCursor(24, 153);
+  tft.print(">> A Seguir na Fila:");
+  tft.setTextColor(COLOR_TEXT);
+  tft.setCursor(24, 166);
+  String nextStr = track.nextTitle;
+  if (track.nextArtist.length() > 0) nextStr += " - " + track.nextArtist;
+  if (nextStr.length() > 38) nextStr = nextStr.substring(0, 36) + "...";
+  if (nextStr.length() == 0) nextStr = "Fim da fila do Spotify";
+  tft.print(nextStr);
+
+  // Botão Inferior para retornar
+  tft.fillRoundRect(80, 196, 160, 32, 8, BTN_BG_DEFAULT);
+  tft.drawRoundRect(80, 196, 160, 32, 8, COLOR_ACCENT);
+  tft.setTextColor(COLOR_ACCENT);
+  tft.setCursor(100, 208);
+  tft.print("< Voltar ao Deck");
+}
+
 void DisplayDriver::drawFooter(const String &info) {
-  tft.fillRect(0, 222, SCREEN_WIDTH, 18, COLOR_BG);
-  tft.drawFastHLine(10, 222, 300, COLOR_DIVIDER);
+  tft.fillRect(0, 226, SCREEN_WIDTH, 14, COLOR_BG);
+  tft.drawFastHLine(10, 226, 300, COLOR_DIVIDER);
   tft.setTextSize(1);
 
   String textToShow;

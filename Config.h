@@ -53,6 +53,12 @@
 #define BTN_BG_PRESSED      0x39E9  // Fundo iluminado quando pressionado
 #define BTN_BORDER_PRESSED  0xFD20  // Borda dourada brilhante ao tocar
 
+// Cores Spotify
+#define COLOR_SPOTIFY_GREEN 0x1DC9  // Verde neon Spotify (#1DB954)
+#define COLOR_SPOTIFY_DARK  0x10A2  // Grafite Spotify escuro (#121212)
+#define COLOR_SPOTIFY_CARD  0x18E3  // Fundo do card Spotify
+#define COLOR_SPOTIFY_BAR   0x2965  // Fundo da barra de progresso
+
 // ============================================================================
 // --- TIPOS DE AÇÃO DO STREAM DECK ---
 // ============================================================================
