@@ -11,3 +11,9 @@ build/
 # IDEs
 .vscode/
 .idea/
+
+# Private and heavy media assets
+*.gif
+brina*
+ScreensaverCustom.h
+
