@@ -10,6 +10,8 @@
  * Recursos:
  * - 6 Botões Touch com ícones vetoriais modernos e feedback tátil
  * - Bluetooth Low Energy nativo HID (sem precisar instalar nada no Mac)
+ * - Portal Web Local embarcado em http://macdeck.local para celular e Mac
+ * - Coexistência Wi-Fi + BLE sem interferência ou perda de pacotes
  * - Atalhos de Mídia (Play/Pause, Próximo, Mudo)
  * - Atalhos de Produtividade e Reunião (Mic Mute, Print, Travar Mac)
  * - LED RGB traseiro para feedback de comando
@@ -21,6 +23,8 @@
 #include "DisplayDriver.h"
 #include "TouchDriver.h"
 #include "BleManager.h"
+#include "WiFiManager.h"
+#include "WebPortal.h"
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
 
@@ -74,6 +78,29 @@ DeckButton buttons[6] = {
 };
 
 bool lastBleStatus = false;
+bool lastWifiStatus = false;
+bool lastApStatus = false;
+unsigned long lastHeaderRefresh = 0;
+
+void executeDeckButton(int index) {
+  if (index < 0 || index >= 6) return;
+  DeckButton &btn = buttons[index];
+  Serial.printf("[DECK] Botao %d acionado: %s\n", index + 1, btn.title);
+
+  // Feedback visual de botão pressionado
+  btn.isPressed = true;
+  display.drawButton(btn);
+
+  // Dispara o comando BLE para o Mac
+  bleMgr.executeButton(btn);
+
+  // Duração do efeito de clique
+  delay(100);
+
+  // Restaura aparência normal
+  btn.isPressed = false;
+  display.drawButton(btn);
+}
 
 void setup() {
   Serial.begin(115200);
@@ -90,51 +117,72 @@ void setup() {
   // 3. Inicializa Bluetooth BLE Keyboard
   bleMgr.begin();
 
-  // 4. Renderiza Interface Completa
-  display.clear(COLOR_BG);
-  display.drawHeader(bleMgr.isConnected());
-  display.drawAllButtons(buttons);
-  display.drawFooter();
+  // 4. Inicializa Wi-Fi Manager (com suporte a fallback AP)
+  wifiManager.begin();
 
-  Serial.println("[SYSTEM] Pronto! Abra Ajustes > Bluetooth no Mac e conecte.");
+  // 5. Inicializa Web Portal (http://macdeck.local)
+  webPortal.setButtonCallback(executeDeckButton);
+  webPortal.begin();
+
+  // 6. Renderiza Interface Completa
+  display.clear(COLOR_BG);
+  display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
+  display.drawAllButtons(buttons);
+  
+  if (wifiManager.isConnected()) {
+    display.drawFooter("http://macdeck.local \x07 IP: " + wifiManager.getIP());
+  } else if (wifiManager.isAPMode()) {
+    display.drawFooter("AP: MacDeck-Setup \x07 192.168.4.1");
+  } else {
+    display.drawFooter("http://macdeck.local \x07 Conectando Wi-Fi...");
+  }
+
+  Serial.println("[SYSTEM] Pronto! Acesse http://macdeck.local no navegador do Mac.");
 }
 
 void loop() {
-  // 1. Monitora estado da conexão Bluetooth
+  // 1. Monitora estado do Bluetooth BLE
   bleMgr.update();
-  bool currentBleStatus = bleMgr.isConnected();
-  if (currentBleStatus != lastBleStatus) {
-    lastBleStatus = currentBleStatus;
-    display.drawHeader(currentBleStatus);
+
+  // 2. Atualiza estado do Wi-Fi e processa requisições Web HTTP
+  wifiManager.update();
+  webPortal.update();
+
+  // 3. Verifica alterações de status de conexão periodicamente
+  if (millis() - lastHeaderRefresh > 500) {
+    lastHeaderRefresh = millis();
+    bool curBle = bleMgr.isConnected();
+    bool curWifi = wifiManager.isConnected();
+    bool curAp = wifiManager.isAPMode();
+
+    if (curBle != lastBleStatus || curWifi != lastWifiStatus || curAp != lastApStatus) {
+      lastBleStatus = curBle;
+      lastWifiStatus = curWifi;
+      lastApStatus = curAp;
+
+      display.drawHeader(curBle, curWifi, curAp);
+      if (curWifi) {
+        display.drawFooter("http://macdeck.local \x07 IP: " + wifiManager.getIP());
+      } else if (curAp) {
+        display.drawFooter("AP: MacDeck-Setup \x07 192.168.4.1");
+      } else {
+        display.drawFooter("http://macdeck.local \x07 Conectando Wi-Fi...");
+      }
+    }
   }
 
-  // 2. Processa toques na tela (Touchscreen)
+  // 4. Processa toques na tela física (Touchscreen)
   int tx, ty;
   if (touch.getTouch(tx, ty)) {
     for (int i = 0; i < 6; i++) {
       DeckButton &btn = buttons[i];
       if (tx >= btn.x && tx <= (btn.x + btn.w) &&
           ty >= btn.y && ty <= (btn.y + btn.h)) {
-
-        Serial.printf("[DECK] Botao %d pressionado: %s\n", i + 1, btn.title);
-
-        // Feedback visual de botão pressionado
-        btn.isPressed = true;
-        display.drawButton(btn);
-
-        // Dispara o comando BLE para o Mac
-        bleMgr.executeButton(btn);
-
-        // Duração do efeito de clique
-        delay(120);
-
-        // Restaura aparência normal
-        btn.isPressed = false;
-        display.drawButton(btn);
+        executeDeckButton(i);
         break;
       }
     }
   }
 
-  delay(10);
+  delay(5);
 }

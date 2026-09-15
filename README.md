@@ -46,6 +46,17 @@
 
 ---
 
+## 🌐 Portal Web Local Embarcado (`http://macdeck.local`)
+
+O MacDeck CYD possui um **servidor web HTTP e mDNS nativo** rodando diretamente no ESP32:
+- **Acesse pelo Navegador**: Conectado à mesma rede Wi-Fi, basta abrir [http://macdeck.local](http://macdeck.local) no Safari, Chrome ou pelo celular.
+- **Controle Remoto Touch**: Espelha os 6 botões físicos na tela do celular — você pode acionar os atalhos do Mac deitado na cama ou em outra parte da mesa!
+- **Configuração de Wi-Fi sem Sofrimento**: Escaneie as redes locais e digite a senha direto pelo smartphone.
+- **Modo Contingência (SoftAP)**: Se nenhuma rede estiver configurada ou fora de alcance, a placa cria a rede Wi-Fi **`MacDeck-Setup`** (IP `192.168.4.1`) para você configurar em segundos.
+- **Pronto para Spotify Web API**: Aba dedicada para salvar `Client ID`, `Client Secret` e `Refresh Token`.
+
+---
+
 ## 🛠️ Pinagem do Hardware (ESP32-2432S028 CYD)
 
 | Periférico | Pinos ESP32 | Descrição |
@@ -56,14 +67,13 @@
 
 ---
 
-## 📲 Como Emparelhar com o Mac
+## 📲 Como Usar e Emparelhar
 
-1. Ligue a placa **ESP32 CYD** na porta USB.
-2. A tela acenderá com o título e a etiqueta azul `[● PAREANDO...]`.
-3. No seu Mac, abra **Ajustes do Sistema > Bluetooth** (ou clique no ícone de Bluetooth na barra de menus).
-4. Na lista de dispositivos próximos, localize **`MacDeck CYD`** e clique em **Conectar**.
-5. Em menos de 2 segundos, o crachá da tela mudará para **`[● CONECTADO]`** em verde.
-6. Pronto! Toque em qualquer botão na tela e veja o Mac responder instantaneamente.
+1. Conecte o **ESP32 CYD** na porta USB.
+2. Na primeira vez, conecte o celular à rede Wi-Fi **`MacDeck-Setup`** e acesse `http://192.168.4.1` para configurar o Wi-Fi da sua casa.
+3. No seu Mac, abra **Ajustes do Sistema > Bluetooth**, localize **`MacDeck CYD`** e clique em **Conectar**.
+4. A tela exibirá o badge verde **`[● CONECTADO]`** e o link **`http://macdeck.local`** no rodapé.
+5. Use os botões na tela física ou no seu navegador web!
 
 ---
 
@@ -77,14 +87,19 @@
 Instale pelo Gerenciador de Bibliotecas da Arduino IDE:
 1. `NimBLE-Arduino` (v2.5.x ou superior)
 2. `HijelHID_BLEKeyboard`
-3. `Adafruit GFX Library`
-4. `Adafruit ST7789 and ST7735 Library`
-5. `XPT2046_Touchscreen`
+3. `ArduinoJson` (v7.x)
+4. `Adafruit GFX Library`
+5. `Adafruit ST7789 and ST7735 Library`
+6. `XPT2046_Touchscreen`
+
+### Esquema de Partição Recomendado
+No menu da Arduino IDE:
+* **Tools > Partition Scheme > "Huge APP (3MB No OTA/1MB SPIFFS)"**
 
 ### Gravação via CLI
 ```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 macDeckCYD/
-arduino-cli upload -p /dev/cu.usbserial-* --fqbn esp32:esp32:esp32 macDeckCYD/
+arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=huge_app macDeckCYD/
+arduino-cli upload -p /dev/cu.usbserial-* --fqbn esp32:esp32:esp32:PartitionScheme=huge_app macDeckCYD/
 ```
 
 ---

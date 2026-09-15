@@ -32,47 +32,76 @@ void DisplayDriver::clear(uint16_t color) {
   tft.fillScreen(color);
 }
 
-void DisplayDriver::drawHeader(bool isConnected) {
+void DisplayDriver::drawHeader(bool isBleConnected, bool isWifiConnected, bool isApMode) {
   tft.fillRect(0, 0, SCREEN_WIDTH, 30, COLOR_HEADER_BG);
   tft.drawFastHLine(0, 30, SCREEN_WIDTH, COLOR_DIVIDER);
 
   // Título
   tft.setTextSize(1);
   tft.setTextColor(COLOR_ACCENT);
-  tft.setCursor(12, 11);
-  tft.print("MACDECK BLE");
+  tft.setCursor(10, 11);
+  tft.print("MACDECK");
 
-  // Status Bluetooth
-  int statusX = 180;
-  int statusY = 8;
-  int statusW = 128;
-  int statusH = 16;
+  // Indicador Wi-Fi (Centro-Esquerda)
+  int wifiX = 72;
+  int wifiY = 11;
+  if (isWifiConnected) {
+    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_GREEN);
+    tft.setTextColor(COLOR_GREEN);
+    tft.setCursor(wifiX + 12, wifiY);
+    tft.print("Wi-Fi");
+  } else if (isApMode) {
+    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_ACCENT);
+    tft.setTextColor(COLOR_ACCENT);
+    tft.setCursor(wifiX + 12, wifiY);
+    tft.print("AP Setup");
+  } else {
+    tft.fillCircle(wifiX + 4, wifiY + 3, 3, COLOR_TEXT_MUTED);
+    tft.setTextColor(COLOR_TEXT_MUTED);
+    tft.setCursor(wifiX + 12, wifiY);
+    tft.print("Wi-Fi Off");
+  }
 
-  uint16_t badgeBg = isConnected ? 0x0A84 : 0x11E8;
-  uint16_t badgeBorder = isConnected ? COLOR_GREEN : COLOR_BLUE;
-  uint16_t badgeText = isConnected ? 0x97F2 : 0x9E3F;
-  const char* label = isConnected ? "CONECTADO" : "PAREANDO...";
+  // Status Bluetooth (Direita)
+  int statusW = 104;
+  int statusH = 18;
+  int statusX = SCREEN_WIDTH - statusW - 8;
+  int statusY = 6;
+
+  uint16_t badgeBg = isBleConnected ? 0x0A85 : 0x098A;
+  uint16_t badgeBorder = isBleConnected ? COLOR_GREEN : COLOR_BLUE;
+  uint16_t badgeText = isBleConnected ? COLOR_GREEN : 0x9E3F;
+  const char* label = isBleConnected ? "CONECTADO" : "PAREANDO...";
 
   tft.fillRoundRect(statusX, statusY, statusW, statusH, 8, badgeBg);
   tft.drawRoundRect(statusX, statusY, statusW, statusH, 8, badgeBorder);
 
   // Ponto colorido indicador
-  tft.fillCircle(statusX + 10, statusY + 8, 3, isConnected ? COLOR_GREEN : COLOR_BLUE);
+  tft.fillCircle(statusX + 10, statusY + 8, 3, isBleConnected ? COLOR_GREEN : COLOR_BLUE);
 
   tft.setTextSize(1);
   tft.setTextColor(badgeText);
-  tft.setCursor(statusX + 22, statusY + 4);
+  tft.setCursor(statusX + 22, statusY + 5);
   tft.print(label);
 }
 
-void DisplayDriver::drawFooter() {
+void DisplayDriver::drawFooter(const String &info) {
+  tft.fillRect(0, 222, SCREEN_WIDTH, 18, COLOR_BG);
   tft.drawFastHLine(10, 222, 300, COLOR_DIVIDER);
   tft.setTextSize(1);
-  tft.setTextColor(COLOR_TEXT_MUTED);
-  const char* foot = "Apple Silicon & macOS \x07 Touch Deck";
-  int textW = strlen(foot) * 6;
+
+  String textToShow;
+  if (info.length() > 0) {
+    textToShow = info;
+    tft.setTextColor(COLOR_CYAN);
+  } else {
+    textToShow = "http://macdeck.local \x07 Apple Silicon Deck";
+    tft.setTextColor(COLOR_TEXT_MUTED);
+  }
+
+  int textW = textToShow.length() * 6;
   tft.setCursor((SCREEN_WIDTH - textW) / 2, 228);
-  tft.print(foot);
+  tft.print(textToShow);
 }
 
 void DisplayDriver::drawButton(const DeckButton &btn) {

@@ -13,8 +13,8 @@ public:
   void begin();
 
   void clear(uint16_t color = COLOR_BG);
-  void drawHeader(bool isConnected);
-  void drawFooter();
+  void drawHeader(bool isBleConnected, bool isWifiConnected, bool isApMode = false);
+  void drawFooter(const String &info = "");
   void drawButton(const DeckButton &btn);
   void drawAllButtons(const DeckButton buttons[6]);
 
