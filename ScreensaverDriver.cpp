@@ -1,6 +1,15 @@
 #include "ScreensaverDriver.h"
-#include "ScreensaverData.h"
 #include "DisplayDriver.h"
+
+#if __has_include("ScreensaverCustom.h")
+  #include "ScreensaverCustom.h"
+  #define ACTIVE_SCREENSAVER_GIF screensaver_custom_gif
+  #define ACTIVE_SCREENSAVER_SIZE sizeof(screensaver_custom_gif)
+#else
+  #include "ScreensaverData.h"
+  #define ACTIVE_SCREENSAVER_GIF screensaver_gif
+  #define ACTIVE_SCREENSAVER_SIZE sizeof(screensaver_gif)
+#endif
 
 ScreensaverDriver screensaver;
 
@@ -73,7 +82,7 @@ void ScreensaverDriver::start() {
   Serial.println("[Screensaver] Ativando modo protetor de tela...");
   display.clear(0x0000); // Tela preta total
 
-  if (gif.open((uint8_t *)screensaver_gif, sizeof(screensaver_gif), GIFDraw)) {
+  if (gif.open((uint8_t *)ACTIVE_SCREENSAVER_GIF, ACTIVE_SCREENSAVER_SIZE, GIFDraw)) {
     int gw = gif.getCanvasWidth();
     int gh = gif.getCanvasHeight();
     gifXOffset = (320 - gw) / 2;

@@ -252,26 +252,42 @@ void setup() {
   // 9. Renderiza Interface Completa
   redrawCurrentScreen();
 
+  // 10. Cria Tarefa de Rede Dedicada no Core 0 (Wi-Fi, WebPortal, Spotify)
+  xTaskCreatePinnedToCore(
+    [](void *pvParameters) {
+      Serial.printf("[SYSTEM] Tarefa de rede iniciada com sucesso no Core %d\n", xPortGetCoreID());
+      for (;;) {
+        wifiManager.update();
+        webPortal.update();
+        spotifyAuth.update();
+        spotifyClient.update();
+        vTaskDelay(pdMS_TO_TICKS(15)); // Cede tempo para o Task Watchdog e Idle Task do Core 0
+      }
+    },
+    "NetworkTask",
+    8192,
+    NULL,
+    1,
+    NULL,
+    0 // Fixado no Core 0!
+  );
+
   Serial.println("[SYSTEM] Pronto! Acesse http://macdeck.local no navegador do Mac.");
 }
 
 void loop() {
-  // 1. Monitora estado do Bluetooth BLE
+  // 1. Monitora estado do Bluetooth BLE no Core 1
   bleMgr.update();
 
-  // 2. Atualiza Wi-Fi, Web Portal, renovação de tokens e polling da fila do Spotify
-  wifiManager.update();
-  webPortal.update();
-  spotifyAuth.update();
-  spotifyClient.update();
+  // (Todas as chamadas pesadas de Wi-Fi, WebServer e HTTPS do Spotify rodam no Core 0!)
 
   // Se estiver em modo Screensaver, atualiza animação do GIF e pula desenho da interface
   if (currentScreenMode == MODE_SCREENSAVER) {
     screensaver.update();
   } else {
-    // 3. Atualização de status do Spotify na tela
+    // 2. Atualização de status do Spotify na tela (thread-safe)
     if (spotifyClient.hasChanged()) {
-      const SpotifyTrackData &track = spotifyClient.getData();
+      SpotifyTrackData track = spotifyClient.getData();
       updateSpotifyButtonState();
 
       if (currentScreenMode == MODE_SPOTIFY_FOCUS) {

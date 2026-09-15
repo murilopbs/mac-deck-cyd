@@ -10,6 +10,7 @@ SpotifyClient spotifyClient;
 SpotifyClient::SpotifyClient()
     : dataChanged(false), lastPollTime(0), lastInterpolationTime(0),
       pollInterval(3500), consecutiveFailures(0) {
+  dataMux = portMUX_INITIALIZER_UNLOCKED;
   currentData.hasTrack = false;
   currentData.isPlaying = false;
   currentData.title = "";
@@ -19,6 +20,13 @@ SpotifyClient::SpotifyClient()
   currentData.durationMs = 0;
   currentData.nextTitle = "";
   currentData.nextArtist = "";
+}
+
+SpotifyTrackData SpotifyClient::getData() {
+  portENTER_CRITICAL(&dataMux);
+  SpotifyTrackData copy = currentData;
+  portEXIT_CRITICAL(&dataMux);
+  return copy;
 }
 
 void SpotifyClient::begin() {
@@ -38,6 +46,7 @@ void SpotifyClient::update() {
     unsigned long delta = now - lastInterpolationTime;
     lastInterpolationTime = now;
 
+    portENTER_CRITICAL(&dataMux);
     if (currentData.hasTrack && currentData.isPlaying) {
       currentData.progressMs += delta;
       if (currentData.progressMs > currentData.durationMs) {
@@ -45,6 +54,7 @@ void SpotifyClient::update() {
       }
       dataChanged = true;
     }
+    portEXIT_CRITICAL(&dataMux);
   }
 
   // 2. Intervalo dinâmico de polling (3.5s tocando, 10s pausado/inativo)
@@ -78,6 +88,7 @@ bool SpotifyClient::fetchPlaybackState() {
 
   // 204: Nenhuma música tocando / Spotify inativo
   if (httpCode == 204) {
+    portENTER_CRITICAL(&dataMux);
     if (currentData.hasTrack) {
       currentData.hasTrack = false;
       currentData.isPlaying = false;
@@ -87,6 +98,7 @@ bool SpotifyClient::fetchPlaybackState() {
       currentData.nextArtist = "";
       dataChanged = true;
     }
+    portEXIT_CRITICAL(&dataMux);
     http.end();
     return true;
   }
@@ -115,6 +127,7 @@ bool SpotifyClient::fetchPlaybackState() {
       uint32_t newProg = doc["progress_ms"] | 0;
       uint32_t newDur = doc["item"]["duration_ms"] | 0;
 
+      portENTER_CRITICAL(&dataMux);
       bool trackSwitched = (newTitle != currentData.title);
 
       currentData.hasTrack = true;
@@ -126,9 +139,11 @@ bool SpotifyClient::fetchPlaybackState() {
       currentData.durationMs = newDur;
       dataChanged = true;
       consecutiveFailures = 0;
+      bool needQueue = (trackSwitched || currentData.nextTitle.length() == 0);
+      portEXIT_CRITICAL(&dataMux);
 
       // Se mudou de música ou ainda não tem a próxima da fila, busca a fila
-      if (trackSwitched || currentData.nextTitle.length() == 0) {
+      if (needQueue) {
         fetchQueue();
       }
 
@@ -176,11 +191,17 @@ bool SpotifyClient::fetchQueue() {
     DeserializationError err = deserializeJson(doc, payload, DeserializationOption::Filter(filter));
 
     if (!err && doc["queue"] && doc["queue"].size() > 0) {
-      currentData.nextTitle = doc["queue"][0]["name"].as<String>();
-      currentData.nextArtist = doc["queue"][0]["artists"][0]["name"] | "";
+      String nTitle = doc["queue"][0]["name"].as<String>();
+      String nArtist = doc["queue"][0]["artists"][0]["name"] | "";
+
+      portENTER_CRITICAL(&dataMux);
+      currentData.nextTitle = nTitle;
+      currentData.nextArtist = nArtist;
       dataChanged = true;
+      portEXIT_CRITICAL(&dataMux);
+
       Serial.printf("[SpotifyClient] Próxima da fila capturada: %s - %s\n",
-                    currentData.nextTitle.c_str(), currentData.nextArtist.c_str());
+                    nTitle.c_str(), nArtist.c_str());
       return true;
     } else {
       if (err) {
@@ -190,9 +211,11 @@ bool SpotifyClient::fetchQueue() {
         Serial.printf("[SpotifyClient] Fila retornou sem itens no momento (Payload: %d bytes)\n",
                       payload.length());
       }
+      portENTER_CRITICAL(&dataMux);
       currentData.nextTitle = "";
       currentData.nextArtist = "";
       dataChanged = true;
+      portEXIT_CRITICAL(&dataMux);
     }
   } else {
     Serial.printf("[SpotifyClient] Erro HTTP ao buscar fila: %d\n", httpCode);
@@ -240,7 +263,12 @@ bool SpotifyClient::pause() {
 }
 
 bool SpotifyClient::togglePlayPause() {
-  if (currentData.isPlaying) {
+  bool playing = false;
+  portENTER_CRITICAL(&dataMux);
+  playing = currentData.isPlaying;
+  portEXIT_CRITICAL(&dataMux);
+
+  if (playing) {
     return pause();
   } else {
     return play();
@@ -258,8 +286,10 @@ bool SpotifyClient::previous() {
 }
 
 void SpotifyClient::setOptimisticPlaying(bool playing) {
+  portENTER_CRITICAL(&dataMux);
   currentData.isPlaying = playing;
   dataChanged = true;
+  portEXIT_CRITICAL(&dataMux);
 }
 
 void SpotifyClient::scheduleFastPoll(unsigned long delayMs) {

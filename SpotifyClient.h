@@ -35,7 +35,8 @@ public:
   void setOptimisticPlaying(bool playing);
   void scheduleFastPoll(unsigned long delayMs = 400);
 
-  const SpotifyTrackData& getData() const { return currentData; }
+  // Retorna cópia thread-safe dos dados atuais
+  SpotifyTrackData getData();
   bool hasChanged() const { return dataChanged; }
   void clearChanged() { dataChanged = false; }
 
@@ -43,6 +44,7 @@ public:
   static String formatTime(uint32_t ms);
 
 private:
+  portMUX_TYPE dataMux;
   SpotifyTrackData currentData;
   bool dataChanged;
   unsigned long lastPollTime;
