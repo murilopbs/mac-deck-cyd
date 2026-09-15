@@ -27,6 +27,7 @@ private:
   void handleSaveSpotify();
   void handleSpotifyStatus();
   void handleSpotifyRefresh();
+  void handleSpotifyNow();
   void handleCallback();
   void handleAction();
   void handleNotFound();

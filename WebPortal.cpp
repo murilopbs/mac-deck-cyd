@@ -3,6 +3,7 @@
 #include "WiFiManager.h"
 #include "BleManager.h"
 #include "SpotifyAuth.h"
+#include "SpotifyClient.h"
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 
@@ -37,6 +38,7 @@ void WebPortal::setupRoutes() {
   server.on("/api/spotify", HTTP_POST, [this]() { handleSaveSpotify(); });
   server.on("/api/spotify/status", HTTP_GET, [this]() { handleSpotifyStatus(); });
   server.on("/api/spotify/refresh", HTTP_POST, [this]() { handleSpotifyRefresh(); });
+  server.on("/api/spotify/now", HTTP_GET, [this]() { handleSpotifyNow(); });
   server.on("/callback", HTTP_GET, [this]() { handleCallback(); });
   server.on("/api/action", HTTP_POST, [this]() { handleAction(); });
   server.onNotFound([this]() { handleNotFound(); });
@@ -160,6 +162,27 @@ void WebPortal::handleSpotifyRefresh() {
   serializeJson(doc, response);
   server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(ok ? 200 : 400, "application/json", response);
+}
+
+void WebPortal::handleSpotifyNow() {
+  const SpotifyTrackData &track = spotifyClient.getData();
+  JsonDocument doc;
+  doc["has_track"] = track.hasTrack;
+  doc["is_playing"] = track.isPlaying;
+  doc["title"] = track.title;
+  doc["artist"] = track.artist;
+  doc["album"] = track.album;
+  doc["progress_ms"] = track.progressMs;
+  doc["duration_ms"] = track.durationMs;
+  doc["progress_str"] = SpotifyClient::formatTime(track.progressMs);
+  doc["duration_str"] = SpotifyClient::formatTime(track.durationMs);
+  doc["next_title"] = track.nextTitle;
+  doc["next_artist"] = track.nextArtist;
+
+  String response;
+  serializeJson(doc, response);
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", response);
 }
 
 void WebPortal::handleCallback() {
