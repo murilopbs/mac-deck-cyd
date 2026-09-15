@@ -33,6 +33,10 @@ public:
   String getSpotifyClientSecret();
   String getSpotifyRefreshToken();
 
+  // Controle de Brilho da Tela
+  void saveBrightness(uint8_t pct);
+  uint8_t getSavedBrightness();
+
   int scanNetworks();
   int getScannedCount();
   ScannedWifi getScannedNetwork(int index);

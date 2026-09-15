@@ -24,8 +24,11 @@ public:
   void drawAllButtons(const DeckButton buttons[6]);
 
   void setBacklight(uint8_t brightnessPct);
+  uint8_t getBacklight() const { return currentBrightness; }
+  Adafruit_ST7789 &getTft() { return tft; }
 
 private:
+  uint8_t currentBrightness;
   SPIClass tftSPI;
   Adafruit_ST7789 tft;
 

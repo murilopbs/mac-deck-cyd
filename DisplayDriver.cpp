@@ -1,11 +1,12 @@
 #include "DisplayDriver.h"
-
 #include "SpotifyClient.h"
+#include "WiFiManager.h"
 
 DisplayDriver display;
 
 DisplayDriver::DisplayDriver()
-  : tftSPI(HSPI),
+  : currentBrightness(85),
+    tftSPI(HSPI),
     tft(&tftSPI, TFT_CS, TFT_DC, TFT_RST) {
 }
 
@@ -15,16 +16,18 @@ void DisplayDriver::begin() {
   tft.setRotation(DISPLAY_ROTATION);
   tft.fillScreen(COLOR_BG);
 
-  // Inicializa Backlight
+  // Inicializa Backlight com o valor persistido
 #if TFT_BL >= 0
   pinMode(TFT_BL, OUTPUT);
-  setBacklight(85);
+  setBacklight(wifiManager.getSavedBrightness());
 #endif
 }
 
 void DisplayDriver::setBacklight(uint8_t brightnessPct) {
 #if TFT_BL >= 0
+  if (brightnessPct < 10) brightnessPct = 10;
   if (brightnessPct > 100) brightnessPct = 100;
+  currentBrightness = brightnessPct;
   uint32_t duty = (brightnessPct * 255) / 100;
   analogWrite(TFT_BL, duty);
 #endif
@@ -41,33 +44,33 @@ void DisplayDriver::drawHeader(bool isBleConnected, bool isWifiConnected, bool i
   // Título (Esquerda)
   tft.setTextSize(1);
   tft.setTextColor(COLOR_ACCENT);
-  tft.setCursor(10, 8);
+  tft.setCursor(8, 8);
   tft.print("MACDECK");
 
   // Indicador Wi-Fi (Centro-Esquerda)
-  int wifiX = 66;
+  int wifiX = 60;
   int wifiY = 8;
   if (isWifiConnected) {
     tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_GREEN);
     tft.setTextColor(COLOR_GREEN);
-    tft.setCursor(wifiX + 10, wifiY);
+    tft.setCursor(wifiX + 9, wifiY);
     tft.print("Wi-Fi");
   } else if (isApMode) {
     tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_ACCENT);
     tft.setTextColor(COLOR_ACCENT);
-    tft.setCursor(wifiX + 10, wifiY);
+    tft.setCursor(wifiX + 9, wifiY);
     tft.print("AP Setup");
   } else {
     tft.fillCircle(wifiX + 3, wifiY + 3, 3, COLOR_TEXT_MUTED);
     tft.setTextColor(COLOR_TEXT_MUTED);
-    tft.setCursor(wifiX + 10, wifiY);
+    tft.setCursor(wifiX + 9, wifiY);
     tft.print("Wi-Fi Off");
   }
 
-  // Status Bluetooth (Direita)
-  int statusW = 100;
+  // Status Bluetooth
+  int statusW = 95;
   int statusH = 16;
-  int statusX = SCREEN_WIDTH - statusW - 8;
+  int statusX = 180;
   int statusY = 4;
 
   uint16_t badgeBg = isBleConnected ? 0x0A85 : 0x098A;
@@ -75,16 +78,28 @@ void DisplayDriver::drawHeader(bool isBleConnected, bool isWifiConnected, bool i
   uint16_t badgeText = isBleConnected ? COLOR_GREEN : 0x9E3F;
   const char* label = isBleConnected ? "CONECTADO" : "PAREANDO...";
 
-  tft.fillRoundRect(statusX, statusY, statusW, statusH, 6, badgeBg);
-  tft.drawRoundRect(statusX, statusY, statusW, statusH, 6, badgeBorder);
+  tft.fillRoundRect(statusX, statusY, statusW, statusH, 5, badgeBg);
+  tft.drawRoundRect(statusX, statusY, statusW, statusH, 5, badgeBorder);
 
   // Ponto colorido indicador
   tft.fillCircle(statusX + 8, statusY + 8, 3, isBleConnected ? COLOR_GREEN : COLOR_BLUE);
 
   tft.setTextSize(1);
   tft.setTextColor(badgeText);
-  tft.setCursor(statusX + 18, statusY + 4);
+  tft.setCursor(statusX + 16, statusY + 4);
   tft.print(label);
+
+  // Botão Seta Screensaver (Canto Superior Direito: x = 284..314, y = 3..21)
+  int scrX = 284;
+  int scrY = 3;
+  int scrW = 30;
+  int scrH = 18;
+  tft.fillRoundRect(scrX, scrY, scrW, scrH, 4, 0x18E5);
+  tft.drawRoundRect(scrX, scrY, scrW, scrH, 4, COLOR_CYAN);
+  tft.setTextColor(COLOR_CYAN);
+  tft.setTextSize(1);
+  tft.setCursor(scrX + 10, scrY + 5);
+  tft.print(">");
 }
 
 void DisplayDriver::drawSpotifyCard(const SpotifyTrackData &track) {

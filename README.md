@@ -52,7 +52,8 @@ O MacDeck CYD possui um **servidor web HTTP e mDNS nativo** rodando diretamente 
 - **Acesse pelo Navegador**: Conectado à mesma rede Wi-Fi, basta abrir [http://macdeck.local](http://macdeck.local) no Safari, Chrome ou pelo celular.
 - **Controle Remoto Touch**: Espelha os 6 botões físicos na tela do celular — você pode acionar os atalhos do Mac deitado na cama ou em outra parte da mesa!
 - **Configuração de Wi-Fi sem Sofrimento**: Escaneie as redes locais e digite a senha direto pelo smartphone.
-- **Modo Contingência (SoftAP)**: Se nenhuma rede estiver configurada ou fora de alcance, a placa cria a rede Wi-Fi **`MacDeck-Setup`** (IP `192.168.4.1`) para você configurar em segundos.
+- **Controle de Brilho da Tela**: Slider interativo de 10% a 100% (aba Sistema) com persistência permanente na memória flash (NVS).
+- **Protetor de Tela com GIF Animado**: Toque no botão com seta `[ > ]` no canto superior direito do display (ou no botão do painel web) para iniciar um screensaver animado (*This is fine* / pixel art). Qualquer toque na tela acorda o MacDeck imediatamente!
 - **Pronto para Spotify Web API**: Aba dedicada para salvar `Client ID`, `Client Secret` e `Refresh Token`.
 
 ---

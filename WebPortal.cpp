@@ -4,6 +4,7 @@
 #include "BleManager.h"
 #include "SpotifyAuth.h"
 #include "SpotifyClient.h"
+#include "DisplayDriver.h"
 #include <ESPmDNS.h>
 #include <ArduinoJson.h>
 
@@ -41,6 +42,7 @@ void WebPortal::setupRoutes() {
   server.on("/api/spotify/now", HTTP_GET, [this]() { handleSpotifyNow(); });
   server.on("/callback", HTTP_GET, [this]() { handleCallback(); });
   server.on("/api/action", HTTP_POST, [this]() { handleAction(); });
+  server.on("/api/brightness", HTTP_POST, [this]() { handleBrightness(); });
   server.onNotFound([this]() { handleNotFound(); });
 }
 
@@ -59,6 +61,7 @@ void WebPortal::handleStatus() {
   doc["free_heap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
   doc["spot_has_creds"] = (wifiManager.getSpotifyClientId().length() > 0);
+  doc["brightness"] = display.getBacklight();
 
   String response;
   serializeJson(doc, response);
@@ -248,9 +251,36 @@ void WebPortal::handleAction() {
     delay(500);
     ESP.restart();
     return;
+  } else if (action == "screensaver") {
+    if (buttonCallback != nullptr) {
+      buttonCallback(99);
+    }
+    server.send(200, "application/json", "{\"success\":true}");
+    return;
   }
 
   server.send(400, "application/json", "{\"error\":\"Unknown action\"}");
+}
+
+void WebPortal::handleBrightness() {
+  if (!server.hasArg("plain")) {
+    server.send(400, "application/json", "{\"error\":\"Missing body\"}");
+    return;
+  }
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) {
+    server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+    return;
+  }
+
+  uint8_t brightness = doc["brightness"] | 85;
+  display.setBacklight(brightness);
+  wifiManager.saveBrightness(brightness);
+
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.send(200, "application/json", "{\"success\":true,\"brightness\":" + String(brightness) + "}");
 }
 
 void WebPortal::handleNotFound() {

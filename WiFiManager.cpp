@@ -7,6 +7,7 @@ static const char *KEY_WIFI_PASS = "wifi_pass";
 static const char *KEY_SPOT_ID   = "spot_id";
 static const char *KEY_SPOT_SEC  = "spot_sec";
 static const char *KEY_SPOT_TOK  = "spot_tok";
+static const char *KEY_BRIGHTNESS = "brightness";
 
 WiFiManager wifiManager;
 
@@ -177,6 +178,29 @@ String WiFiManager::getSpotifyRefreshToken() {
     val = p.getString(KEY_SPOT_TOK, "");
     p.end();
   }
+  return val;
+}
+
+void WiFiManager::saveBrightness(uint8_t pct) {
+  if (pct < 10) pct = 10;
+  if (pct > 100) pct = 100;
+  Preferences p;
+  if (p.begin(PREF_NAMESPACE, false)) {
+    p.putUChar(KEY_BRIGHTNESS, pct);
+    p.end();
+  }
+  Serial.printf("[System] Brilho salvo no NVS: %d%%\n", pct);
+}
+
+uint8_t WiFiManager::getSavedBrightness() {
+  Preferences p;
+  uint8_t val = 85; // Padrão confortável
+  if (p.begin(PREF_NAMESPACE, true)) {
+    val = p.getUChar(KEY_BRIGHTNESS, 85);
+    p.end();
+  }
+  if (val < 10) val = 10;
+  if (val > 100) val = 100;
   return val;
 }
 

@@ -30,6 +30,7 @@ private:
   void handleSpotifyNow();
   void handleCallback();
   void handleAction();
+  void handleBrightness();
   void handleNotFound();
 };
 

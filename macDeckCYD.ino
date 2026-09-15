@@ -26,13 +26,15 @@
 #include "WebPortal.h"
 #include "SpotifyAuth.h"
 #include "SpotifyClient.h"
+#include "ScreensaverDriver.h"
 #include <BLEHIDKeys.h>
 #include <BLEHIDMediaKeys.h>
 
 // Modos de Exibição da Tela
 enum ScreenMode {
   MODE_DECK = 0,        // Grade com 6 botões + Card Spotify no topo
-  MODE_SPOTIFY_FOCUS    // Player do Spotify expandido em tela cheia interativo
+  MODE_SPOTIFY_FOCUS,   // Player do Spotify expandido em tela cheia interativo
+  MODE_SCREENSAVER      // Protetor de tela animado com GIF
 };
 
 ScreenMode currentScreenMode = MODE_DECK;
@@ -130,6 +132,12 @@ void redrawCurrentScreen() {
 }
 
 void executeDeckButton(int index) {
+  if (index == 99) {
+    Serial.println("[DECK] Acionamento do Screensaver via Web Portal!");
+    currentScreenMode = MODE_SCREENSAVER;
+    screensaver.start();
+    return;
+  }
   if (index < 0 || index >= 6) return;
   DeckButton &btn = buttons[index];
   Serial.printf("[DECK] Botao %d acionado: %s\n", index + 1, btn.title);
@@ -238,7 +246,10 @@ void setup() {
   // 7. Inicializa Cliente da Fila do Spotify Web API
   spotifyClient.begin();
 
-  // 8. Renderiza Interface Completa
+  // 8. Inicializa Protetor de Tela (Screensaver)
+  screensaver.begin();
+
+  // 9. Renderiza Interface Completa
   redrawCurrentScreen();
 
   Serial.println("[SYSTEM] Pronto! Acesse http://macdeck.local no navegador do Mac.");
@@ -254,47 +265,59 @@ void loop() {
   spotifyAuth.update();
   spotifyClient.update();
 
-  // 3. Atualização de status do Spotify na tela
-  if (spotifyClient.hasChanged()) {
-    const SpotifyTrackData &track = spotifyClient.getData();
-    updateSpotifyButtonState();
+  // Se estiver em modo Screensaver, atualiza animação do GIF e pula desenho da interface
+  if (currentScreenMode == MODE_SCREENSAVER) {
+    screensaver.update();
+  } else {
+    // 3. Atualização de status do Spotify na tela
+    if (spotifyClient.hasChanged()) {
+      const SpotifyTrackData &track = spotifyClient.getData();
+      updateSpotifyButtonState();
 
-    if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
-      display.drawSpotifyFullScreen(track);
-    } else {
-      // Se a música ou estado de reprodução mudou, redesenha o card e o botão play/pause
-      if (track.title != lastDisplayedSong || track.isPlaying != lastPlayingState) {
-        lastDisplayedSong = track.title;
-        lastPlayingState = track.isPlaying;
-        display.drawSpotifyCard(track);
-        display.drawButton(buttons[0]);
+      if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
+        display.drawSpotifyFullScreen(track);
       } else {
-        // Apenas o tempo avançou: atualiza a barra de progresso suavemente
-        display.drawSpotifyProgressOnly(track);
+        // Se a música ou estado de reprodução mudou, redesenha o card e o botão play/pause
+        if (track.title != lastDisplayedSong || track.isPlaying != lastPlayingState) {
+          lastDisplayedSong = track.title;
+          lastPlayingState = track.isPlaying;
+          display.drawSpotifyCard(track);
+          display.drawButton(buttons[0]);
+        } else {
+          // Apenas o tempo avançou: atualiza a barra de progresso suavemente
+          display.drawSpotifyProgressOnly(track);
+        }
       }
+      spotifyClient.clearChanged();
     }
-    spotifyClient.clearChanged();
-  }
 
-  // 4. Verifica alterações de status de conexão de rede periodicamente
-  if (millis() - lastHeaderRefresh > 1000) {
-    lastHeaderRefresh = millis();
-    bool curBle = bleMgr.isConnected();
-    bool curWifi = wifiManager.isConnected();
-    bool curAp = wifiManager.isAPMode();
+    // 4. Verifica alterações de status de conexão de rede periodicamente
+    if (millis() - lastHeaderRefresh > 1000) {
+      lastHeaderRefresh = millis();
+      bool curBle = bleMgr.isConnected();
+      bool curWifi = wifiManager.isConnected();
+      bool curAp = wifiManager.isAPMode();
 
-    if (curBle != lastBleStatus || curWifi != lastWifiStatus || curAp != lastApStatus) {
-      lastBleStatus = curBle;
-      lastWifiStatus = curWifi;
-      lastApStatus = curAp;
-      display.drawHeader(curBle, curWifi, curAp);
+      if (curBle != lastBleStatus || curWifi != lastWifiStatus || curAp != lastApStatus) {
+        lastBleStatus = curBle;
+        lastWifiStatus = curWifi;
+        lastApStatus = curAp;
+        display.drawHeader(curBle, curWifi, curAp);
+      }
     }
   }
 
   // 5. Processa toques na tela física (Touchscreen)
   int tx, ty;
   if (touch.getTouch(tx, ty)) {
-    if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
+    if (currentScreenMode == MODE_SCREENSAVER) {
+      // Qualquer toque no screensaver acorda o MacDeck
+      Serial.println("[UI] Toque na tela: saindo do Screensaver.");
+      screensaver.stop();
+      currentScreenMode = MODE_DECK;
+      redrawCurrentScreen();
+      delay(200);
+    } else if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
       // Modo Focus Full-Screen
       // Botão Voltar (< DECK) no canto superior direito
       if (tx >= 210 && ty >= 25 && ty <= 58) {
@@ -347,8 +370,15 @@ void loop() {
       }
     } else {
       // Modo Deck
+      // Toque no botão seta '>' no cabeçalho (x = 275..320, y = 0..26) ativa o Screensaver
+      if (tx >= 270 && ty <= 28) {
+        Serial.println("[UI] Botao Seta acionado: iniciando Screensaver com GIF!");
+        currentScreenMode = MODE_SCREENSAVER;
+        screensaver.start();
+        delay(200);
+      }
       // Toque na área do Spotify Card (y = 26..72) expande para modo foco
-      if (ty >= 26 && ty <= 72 && tx >= 10 && tx <= 310) {
+      else if (ty >= 26 && ty <= 72 && tx >= 10 && tx <= 265) {
         Serial.println("[UI] Toque no Spotify Card: abrindo Modo Focus Full-Screen...");
         currentScreenMode = MODE_SPOTIFY_FOCUS;
         redrawCurrentScreen();
