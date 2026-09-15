@@ -71,6 +71,7 @@ enum ActionType {
 
 enum IconType {
   ICON_PLAY_PAUSE = 0,
+  ICON_PAUSE,
   ICON_NEXT,
   ICON_MUTE,
   ICON_MIC_MUTE,

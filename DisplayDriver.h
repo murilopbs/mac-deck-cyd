@@ -31,6 +31,7 @@ private:
 
   void drawIcon(int cx, int cy, IconType icon, uint16_t color);
   void drawPlayPauseIcon(int cx, int cy, uint16_t color);
+  void drawPauseIcon(int cx, int cy, uint16_t color);
   void drawNextIcon(int cx, int cy, uint16_t color);
   void drawMuteIcon(int cx, int cy, uint16_t color);
   void drawMicMuteIcon(int cx, int cy, uint16_t color);

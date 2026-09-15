@@ -9,12 +9,11 @@
  * 
  * Recursos:
  * - 6 Botões Touch com ícones vetoriais modernos e feedback tátil
- * - Bluetooth Low Energy nativo HID (sem precisar instalar nada no Mac)
- * - Portal Web Local embarcado em http://macdeck.local para celular e Mac
- * - Integração Spotify Web API: Faixa Atual + Próxima da Fila + Progresso
- * - Modo Focus Full-Screen ao tocar no card do Spotify
- * - Coexistência Wi-Fi + BLE sem interferência ou perda de pacotes
- * - LED RGB traseiro para feedback de comando
+ * - Botão Play/Pause adaptativo dinâmico (inverte ícone instantaneamente)
+ * - Controles de mídia híbridos: BLE HID instantâneo + API REST do Spotify
+ * - Modo Focus Full-Screen com botões interativos (Prev, Play/Pause, Next)
+ * - Feedback luminoso colorido no LED RGB traseiro
+ * - Portal Web Local em http://macdeck.local
  * 
  * ============================================================================
  */
@@ -33,13 +32,12 @@
 // Modos de Exibição da Tela
 enum ScreenMode {
   MODE_DECK = 0,        // Grade com 6 botões + Card Spotify no topo
-  MODE_SPOTIFY_FOCUS    // Player do Spotify expandido em tela cheia
+  MODE_SPOTIFY_FOCUS    // Player do Spotify expandido em tela cheia interativo
 };
 
 ScreenMode currentScreenMode = MODE_DECK;
 
 // Definição dos 6 Botões da Grade (2 linhas x 3 colunas)
-// Ajustados para y = 74..146 (Linha 1) e y = 150..222 (Linha 2)
 DeckButton buttons[6] = {
   // --- LINHA 1 (y = 74 a 146, altura 72px) ---
   {
@@ -95,7 +93,24 @@ unsigned long lastHeaderRefresh = 0;
 String lastDisplayedSong = "";
 bool lastPlayingState = false;
 
+void updateSpotifyButtonState() {
+  bool isPlaying = spotifyClient.getData().isPlaying;
+  if (isPlaying) {
+    buttons[0].title = "PAUSE";
+    buttons[0].subtitle = "Spotify";
+    buttons[0].icon = ICON_PAUSE;
+    buttons[0].iconColor = COLOR_ACCENT;
+  } else {
+    buttons[0].title = "PLAY";
+    buttons[0].subtitle = "Spotify/Midia";
+    buttons[0].icon = ICON_PLAY_PAUSE;
+    buttons[0].iconColor = COLOR_SPOTIFY_GREEN;
+  }
+}
+
 void redrawCurrentScreen() {
+  updateSpotifyButtonState();
+
   if (currentScreenMode == MODE_DECK) {
     display.clear(COLOR_BG);
     display.drawHeader(bleMgr.isConnected(), wifiManager.isConnected(), wifiManager.isAPMode());
@@ -119,23 +134,80 @@ void executeDeckButton(int index) {
   DeckButton &btn = buttons[index];
   Serial.printf("[DECK] Botao %d acionado: %s\n", index + 1, btn.title);
 
-  // Feedback visual de botão pressionado
-  btn.isPressed = true;
-  if (currentScreenMode == MODE_DECK) {
-    display.drawButton(btn);
+  // Tratamento especial para PLAY/PAUSE (Botão 0)
+  if (index == 0) {
+    bool nextState = !spotifyClient.getData().isPlaying;
+    spotifyClient.setOptimisticPlaying(nextState);
+    updateSpotifyButtonState();
+
+    if (currentScreenMode == MODE_DECK) {
+      btn.isPressed = true;
+      display.drawButton(btn);
+      display.drawSpotifyCard(spotifyClient.getData());
+    }
+
+    // Feedback luminoso no LED RGB: Verde se deu play, Âmbar se deu pause
+    bleMgr.pulseLed(nextState ? false : true, true, false, 80);
+
+    // Dispara via BLE HID para o Mac
+    bleMgr.sendMedia(MEDIA_PLAY_PAUSE);
+
+    // Se conectado ao Wi-Fi e com Spotify autenticado, chama também a API REST
+    if (wifiManager.isConnected() && spotifyAuth.isAuthenticated()) {
+      if (nextState) spotifyClient.play(); else spotifyClient.pause();
+    }
+
+    delay(100);
+    btn.isPressed = false;
+    if (currentScreenMode == MODE_DECK) {
+      display.drawButton(btn);
+    }
+    return;
   }
 
-  // Dispara o comando BLE para o Mac
+  // Tratamento para PRÓXIMO (Botão 1)
+  if (index == 1) {
+    btn.isPressed = true;
+    if (currentScreenMode == MODE_DECK) display.drawButton(btn);
+
+    // Feedback ciano
+    bleMgr.pulseLed(false, true, true, 80);
+    bleMgr.sendMedia(MEDIA_NEXT_TRACK);
+
+    if (wifiManager.isConnected() && spotifyAuth.isAuthenticated()) {
+      spotifyClient.next();
+    }
+
+    delay(100);
+    btn.isPressed = false;
+    if (currentScreenMode == MODE_DECK) display.drawButton(btn);
+    return;
+  }
+
+  // Tratamento para MUDO (Botão 2)
+  if (index == 2) {
+    btn.isPressed = true;
+    if (currentScreenMode == MODE_DECK) display.drawButton(btn);
+
+    // Feedback vermelho
+    bleMgr.pulseLed(true, false, false, 100);
+    bleMgr.sendMedia(MEDIA_MUTE);
+
+    delay(100);
+    btn.isPressed = false;
+    if (currentScreenMode == MODE_DECK) display.drawButton(btn);
+    return;
+  }
+
+  // Botões de macro padrão (Mic Mute, Print, Lock)
+  btn.isPressed = true;
+  if (currentScreenMode == MODE_DECK) display.drawButton(btn);
+
   bleMgr.executeButton(btn);
 
-  // Duração do efeito de clique
   delay(100);
-
-  // Restaura aparência normal
   btn.isPressed = false;
-  if (currentScreenMode == MODE_DECK) {
-    display.drawButton(btn);
-  }
+  if (currentScreenMode == MODE_DECK) display.drawButton(btn);
 }
 
 void setup() {
@@ -185,15 +257,17 @@ void loop() {
   // 3. Atualização de status do Spotify na tela
   if (spotifyClient.hasChanged()) {
     const SpotifyTrackData &track = spotifyClient.getData();
+    updateSpotifyButtonState();
 
     if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
       display.drawSpotifyFullScreen(track);
     } else {
-      // Se a música ou estado de reprodução mudou, redesenha o card inteiro
+      // Se a música ou estado de reprodução mudou, redesenha o card e o botão play/pause
       if (track.title != lastDisplayedSong || track.isPlaying != lastPlayingState) {
         lastDisplayedSong = track.title;
         lastPlayingState = track.isPlaying;
         display.drawSpotifyCard(track);
+        display.drawButton(buttons[0]);
       } else {
         // Apenas o tempo avançou: atualiza a barra de progresso suavemente
         display.drawSpotifyProgressOnly(track);
@@ -221,11 +295,56 @@ void loop() {
   int tx, ty;
   if (touch.getTouch(tx, ty)) {
     if (currentScreenMode == MODE_SPOTIFY_FOCUS) {
-      // No modo foco, qualquer toque ou toque no botão de voltar retorna ao deck
-      Serial.println("[UI] Saindo do Modo Focus... Retornando ao Stream Deck.");
-      currentScreenMode = MODE_DECK;
-      redrawCurrentScreen();
-      delay(200);
+      // Modo Focus Full-Screen
+      // Botão Voltar (< DECK) no canto superior direito
+      if (tx >= 210 && ty >= 25 && ty <= 58) {
+        Serial.println("[UI] Botao Voltar pressionado: retornando ao Deck.");
+        currentScreenMode = MODE_DECK;
+        redrawCurrentScreen();
+        delay(150);
+      }
+      // Botão PREV (x = 20..104, y = 180..230)
+      else if (tx >= 15 && tx <= 105 && ty >= 175 && ty <= 235) {
+        Serial.println("[UI] Focus Player: Botao PREV acionado.");
+        bleMgr.pulseLed(false, true, true, 80);
+        bleMgr.sendMedia(MEDIA_PREV_TRACK);
+        if (wifiManager.isConnected() && spotifyAuth.isAuthenticated()) {
+          spotifyClient.previous();
+        }
+        delay(150);
+      }
+      // Botão PLAY/PAUSE (x = 110..210, y = 180..230)
+      else if (tx >= 110 && tx <= 210 && ty >= 175 && ty <= 235) {
+        Serial.println("[UI] Focus Player: Botao PLAY/PAUSE acionado.");
+        bool nextState = !spotifyClient.getData().isPlaying;
+        spotifyClient.setOptimisticPlaying(nextState);
+        updateSpotifyButtonState();
+
+        bleMgr.pulseLed(nextState ? false : true, true, false, 80);
+        bleMgr.sendMedia(MEDIA_PLAY_PAUSE);
+
+        if (wifiManager.isConnected() && spotifyAuth.isAuthenticated()) {
+          if (nextState) spotifyClient.play(); else spotifyClient.pause();
+        }
+        display.drawSpotifyFullScreen(spotifyClient.getData());
+        delay(150);
+      }
+      // Botão NEXT (x = 214..305, y = 180..230)
+      else if (tx >= 214 && tx <= 305 && ty >= 175 && ty <= 235) {
+        Serial.println("[UI] Focus Player: Botao NEXT acionado.");
+        bleMgr.pulseLed(false, true, true, 80);
+        bleMgr.sendMedia(MEDIA_NEXT_TRACK);
+        if (wifiManager.isConnected() && spotifyAuth.isAuthenticated()) {
+          spotifyClient.next();
+        }
+        delay(150);
+      }
+      // Toque em qualquer outra parte do player retorna ao Deck
+      else if (ty >= 60 && ty <= 170) {
+        currentScreenMode = MODE_DECK;
+        redrawCurrentScreen();
+        delay(150);
+      }
     } else {
       // Modo Deck
       // Toque na área do Spotify Card (y = 26..72) expande para modo foco

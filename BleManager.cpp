@@ -103,3 +103,14 @@ void BleManager::sendMacro(uint8_t keyCode, uint8_t modifiers) {
 void BleManager::sendKey(uint8_t keyCode) {
   bleKeyboard.tap(keyCode);
 }
+
+void BleManager::pulseLed(bool r, bool g, bool b, uint16_t durationMs) {
+  // LED RGB onboard do CYD é ativo em LOW
+  digitalWrite(CYD_LED_RED, r ? LOW : HIGH);
+  digitalWrite(CYD_LED_GREEN, g ? LOW : HIGH);
+  digitalWrite(CYD_LED_BLUE, b ? LOW : HIGH);
+  delay(durationMs);
+  digitalWrite(CYD_LED_RED, HIGH);
+  digitalWrite(CYD_LED_GREEN, HIGH);
+  digitalWrite(CYD_LED_BLUE, HIGH);
+}

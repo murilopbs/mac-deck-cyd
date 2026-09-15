@@ -182,6 +182,73 @@ bool SpotifyClient::fetchQueue() {
   return false;
 }
 
+static bool sendPlaybackCommand(const char *endpoint, const char *method) {
+  String token = spotifyAuth.getValidAccessToken();
+  if (token.length() == 0) return false;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.begin(client, String("https://api.spotify.com/v1/me/player/") + endpoint);
+  http.addHeader("Authorization", "Bearer " + token);
+  http.addHeader("Content-Length", "0");
+  http.setTimeout(3000);
+
+  int httpCode = 0;
+  if (strcmp(method, "PUT") == 0) {
+    httpCode = http.PUT("");
+  } else if (strcmp(method, "POST") == 0) {
+    httpCode = http.POST("");
+  }
+
+  http.end();
+  Serial.printf("[SpotifyClient] Comando '%s' enviado via API: HTTP %d\n", endpoint, httpCode);
+  return (httpCode == 200 || httpCode == 204);
+}
+
+bool SpotifyClient::play() {
+  setOptimisticPlaying(true);
+  scheduleFastPoll(400);
+  return sendPlaybackCommand("play", "PUT");
+}
+
+bool SpotifyClient::pause() {
+  setOptimisticPlaying(false);
+  scheduleFastPoll(400);
+  return sendPlaybackCommand("pause", "PUT");
+}
+
+bool SpotifyClient::togglePlayPause() {
+  if (currentData.isPlaying) {
+    return pause();
+  } else {
+    return play();
+  }
+}
+
+bool SpotifyClient::next() {
+  scheduleFastPoll(500);
+  return sendPlaybackCommand("next", "POST");
+}
+
+bool SpotifyClient::previous() {
+  scheduleFastPoll(500);
+  return sendPlaybackCommand("previous", "POST");
+}
+
+void SpotifyClient::setOptimisticPlaying(bool playing) {
+  currentData.isPlaying = playing;
+  dataChanged = true;
+}
+
+void SpotifyClient::scheduleFastPoll(unsigned long delayMs) {
+  unsigned long now = millis();
+  if (now > delayMs) {
+    lastPollTime = now - (pollInterval - delayMs);
+  }
+}
+
 String SpotifyClient::formatTime(uint32_t ms) {
   uint32_t totalSec = ms / 1000;
   uint32_t minutes = totalSec / 60;

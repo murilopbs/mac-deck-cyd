@@ -24,6 +24,17 @@ public:
   // Força uma consulta imediata à API do Spotify
   bool fetchNow();
 
+  // Controles diretos via Spotify Web API
+  bool play();
+  bool pause();
+  bool togglePlayPause();
+  bool next();
+  bool previous();
+
+  // Controle de estado otimista e agendamento de polling rápido
+  void setOptimisticPlaying(bool playing);
+  void scheduleFastPoll(unsigned long delayMs = 400);
+
   const SpotifyTrackData& getData() const { return currentData; }
   bool hasChanged() const { return dataChanged; }
   void clearChanged() { dataChanged = false; }

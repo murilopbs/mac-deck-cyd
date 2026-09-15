@@ -188,19 +188,31 @@ void DisplayDriver::drawSpotifyProgressOnly(const SpotifyTrackData &track) {
 void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
   tft.fillRect(0, 25, SCREEN_WIDTH, SCREEN_HEIGHT - 25, COLOR_SPOTIFY_DARK);
 
+  // Botão Superior Direito para retornar ao Deck
+  int backW = 76;
+  int backH = 20;
+  int backX = SCREEN_WIDTH - backW - 12;
+  int backY = 32;
+  tft.fillRoundRect(backX, backY, backW, backH, 6, BTN_BG_DEFAULT);
+  tft.drawRoundRect(backX, backY, backW, backH, 6, COLOR_ACCENT);
+  tft.setTextSize(1);
+  tft.setTextColor(COLOR_ACCENT);
+  tft.setCursor(backX + 10, backY + 6);
+  tft.print("< DECK");
+
   if (!track.hasTrack) {
     tft.setTextSize(2);
     tft.setTextColor(COLOR_TEXT_MUTED);
-    tft.setCursor(50, 100);
+    tft.setCursor(40, 90);
     tft.print("Spotify Inativo");
     tft.setTextSize(1);
-    tft.setCursor(50, 130);
-    tft.print("Inicie uma musica no Mac ou celular");
+    tft.setCursor(40, 120);
+    tft.print("Inicie uma musica no seu Mac ou celular");
 
-    tft.fillRoundRect(80, 180, 160, 36, 8, BTN_BG_DEFAULT);
-    tft.drawRoundRect(80, 180, 160, 36, 8, COLOR_ACCENT);
-    tft.setTextColor(COLOR_ACCENT);
-    tft.setCursor(95, 193);
+    tft.fillRoundRect(80, 160, 160, 36, 8, BTN_BG_DEFAULT);
+    tft.drawRoundRect(80, 160, 160, 36, 8, COLOR_SPOTIFY_GREEN);
+    tft.setTextColor(COLOR_SPOTIFY_GREEN);
+    tft.setCursor(95, 173);
     tft.print("< Voltar ao Deck");
     return;
   }
@@ -209,8 +221,8 @@ void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
   tft.setTextSize(2);
   tft.setTextColor(COLOR_TEXT);
   String title = track.title;
-  if (title.length() > 18) title = title.substring(0, 16) + "...";
-  tft.setCursor(16, 40);
+  if (title.length() > 16) title = title.substring(0, 14) + "...";
+  tft.setCursor(16, 36);
   tft.print(title);
 
   // Artista e Álbum
@@ -218,15 +230,15 @@ void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
   tft.setTextColor(COLOR_SPOTIFY_GREEN);
   String artistAlbum = track.artist;
   if (track.album.length() > 0) artistAlbum += " \x07 " + track.album;
-  if (artistAlbum.length() > 40) artistAlbum = artistAlbum.substring(0, 38) + "...";
-  tft.setCursor(16, 64);
+  if (artistAlbum.length() > 36) artistAlbum = artistAlbum.substring(0, 34) + "...";
+  tft.setCursor(16, 58);
   tft.print(artistAlbum);
 
   // Status Badge
   int badgeW = 90;
   int badgeH = 18;
   int badgeX = 16;
-  int badgeY = 82;
+  int badgeY = 74;
   if (track.isPlaying) {
     tft.fillRoundRect(badgeX, badgeY, badgeW, badgeH, 6, 0x0A85);
     tft.drawRoundRect(badgeX, badgeY, badgeW, badgeH, 6, COLOR_SPOTIFY_GREEN);
@@ -243,7 +255,7 @@ void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
 
   // Barra de Progresso Grande
   int bX = 16;
-  int bY = 114;
+  int bY = 104;
   int bW = 288;
   int bH = 6;
   tft.fillRect(bX, bY, bW, bH, COLOR_SPOTIFY_BAR);
@@ -255,33 +267,55 @@ void DisplayDriver::drawSpotifyFullScreen(const SpotifyTrackData &track) {
 
   // Tempos abaixo da barra
   tft.setTextColor(COLOR_TEXT_MUTED);
-  tft.setCursor(bX, bY + 12);
+  tft.setCursor(bX, bY + 10);
   tft.print(SpotifyClient::formatTime(track.progressMs));
 
   String totalStr = SpotifyClient::formatTime(track.durationMs);
-  tft.setCursor(bX + bW - (totalStr.length() * 6), bY + 12);
+  tft.setCursor(bX + bW - (totalStr.length() * 6), bY + 10);
   tft.print(totalStr);
 
   // Card Próxima Música (A Seguir)
-  tft.fillRoundRect(16, 145, 288, 38, 8, 0x18E5);
-  tft.drawRoundRect(16, 145, 288, 38, 8, COLOR_CYAN);
+  tft.fillRoundRect(16, 132, 288, 36, 8, 0x18E5);
+  tft.drawRoundRect(16, 132, 288, 36, 8, COLOR_CYAN);
   tft.setTextColor(COLOR_CYAN);
-  tft.setCursor(24, 153);
+  tft.setCursor(24, 140);
   tft.print(">> A Seguir na Fila:");
   tft.setTextColor(COLOR_TEXT);
-  tft.setCursor(24, 166);
+  tft.setCursor(24, 153);
   String nextStr = track.nextTitle;
   if (track.nextArtist.length() > 0) nextStr += " - " + track.nextArtist;
-  if (nextStr.length() > 38) nextStr = nextStr.substring(0, 36) + "...";
+  if (nextStr.length() > 36) nextStr = nextStr.substring(0, 34) + "...";
   if (nextStr.length() == 0) nextStr = "Fim da fila do Spotify";
   tft.print(nextStr);
 
-  // Botão Inferior para retornar
-  tft.fillRoundRect(80, 196, 160, 32, 8, BTN_BG_DEFAULT);
-  tft.drawRoundRect(80, 196, 160, 32, 8, COLOR_ACCENT);
-  tft.setTextColor(COLOR_ACCENT);
-  tft.setCursor(100, 208);
-  tft.print("< Voltar ao Deck");
+  // 3 Botões de Controle na parte inferior
+  // Botão 1: ANTERIOR (x = 20, y = 184, w = 84, h = 42)
+  tft.fillRoundRect(20, 184, 84, 42, 8, BTN_BG_DEFAULT);
+  tft.drawRoundRect(20, 184, 84, 42, 8, BTN_BORDER_DEFAULT);
+  tft.setTextColor(COLOR_TEXT);
+  tft.setCursor(34, 201);
+  tft.print("|<< PREV");
+
+  // Botão 2: PLAY / PAUSE (x = 114, y = 184, w = 92, h = 42)
+  uint16_t playBg = track.isPlaying ? 0x2126 : 0x0A85;
+  uint16_t playBorder = track.isPlaying ? COLOR_ACCENT : COLOR_SPOTIFY_GREEN;
+  tft.fillRoundRect(114, 184, 92, 42, 8, playBg);
+  tft.drawRoundRect(114, 184, 92, 42, 8, playBorder);
+  tft.setTextColor(track.isPlaying ? COLOR_ACCENT : COLOR_SPOTIFY_GREEN);
+  if (track.isPlaying) {
+    tft.setCursor(134, 201);
+    tft.print("❚❚ PAUSE");
+  } else {
+    tft.setCursor(138, 201);
+    tft.print("▶ PLAY");
+  }
+
+  // Botão 3: PRÓXIMO (x = 216, y = 184, w = 84, h = 42)
+  tft.fillRoundRect(216, 184, 84, 42, 8, BTN_BG_DEFAULT);
+  tft.drawRoundRect(216, 184, 84, 42, 8, BTN_BORDER_DEFAULT);
+  tft.setTextColor(COLOR_TEXT);
+  tft.setCursor(232, 201);
+  tft.print("NEXT >>");
 }
 
 void DisplayDriver::drawFooter(const String &info) {
@@ -324,13 +358,13 @@ void DisplayDriver::drawButton(const DeckButton &btn) {
   tft.setTextSize(1);
   tft.setTextColor(btn.isPressed ? COLOR_ACCENT : COLOR_TEXT);
   int titleW = strlen(btn.title) * 6;
-  tft.setCursor(cx - titleW / 2, btn.y + 52);
+  tft.setCursor(cx - titleW / 2, btn.y + 50);
   tft.print(btn.title);
 
   // Subtítulo
   tft.setTextColor(COLOR_TEXT_MUTED);
   int subW = strlen(btn.subtitle) * 6;
-  tft.setCursor(cx - subW / 2, btn.y + 66);
+  tft.setCursor(cx - subW / 2, btn.y + 62);
   tft.print(btn.subtitle);
 }
 
@@ -343,6 +377,7 @@ void DisplayDriver::drawAllButtons(const DeckButton buttons[6]) {
 void DisplayDriver::drawIcon(int cx, int cy, IconType icon, uint16_t color) {
   switch (icon) {
     case ICON_PLAY_PAUSE: drawPlayPauseIcon(cx, cy, color); break;
+    case ICON_PAUSE:      drawPauseIcon(cx, cy, color); break;
     case ICON_NEXT:       drawNextIcon(cx, cy, color); break;
     case ICON_MUTE:       drawMuteIcon(cx, cy, color); break;
     case ICON_MIC_MUTE:   drawMicMuteIcon(cx, cy, color); break;
@@ -350,6 +385,11 @@ void DisplayDriver::drawIcon(int cx, int cy, IconType icon, uint16_t color) {
     case ICON_LOCK:       drawLockIcon(cx, cy, color); break;
     default: break;
   }
+}
+
+void DisplayDriver::drawPauseIcon(int cx, int cy, uint16_t color) {
+  tft.fillRect(cx - 7, cy - 8, 5, 16, color);
+  tft.fillRect(cx + 2, cy - 8, 5, 16, color);
 }
 
 void DisplayDriver::drawPlayPauseIcon(int cx, int cy, uint16_t color) {

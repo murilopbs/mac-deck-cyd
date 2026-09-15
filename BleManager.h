@@ -22,6 +22,9 @@ public:
   void sendMacro(uint8_t keyCode, uint8_t modifiers);
   void sendKey(uint8_t keyCode);
 
+  // Feedback luminoso no LED RGB onboard (Ativo em LOW)
+  void pulseLed(bool r, bool g, bool b, uint16_t durationMs = 80);
+
 private:
   HijelHID_BLEKeyboard bleKeyboard;
   bool wasConnected;
